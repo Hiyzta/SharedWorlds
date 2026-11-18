@@ -383,6 +383,8 @@ public sealed class SharedWorldsService
 			return new UploadResult { Success = false, Message = "No pending upload for this world." };
 
 		string dir = Path.Combine(SharedWorldPaths.Root, record.PendingSnapshotDir);
+		if (!SharedWorldPaths.IsInsideSavePath(dir))
+			return new UploadResult { Success = false, Message = "Pending snapshot path is outside the tModLoader save directory." };
 		if (!SnapshotService.VerifySnapshot(dir, out SnapshotManifest? manifest, out string error) || manifest == null)
 			return new UploadResult { Success = false, Message = "Pending snapshot is unreadable: " + error };
 

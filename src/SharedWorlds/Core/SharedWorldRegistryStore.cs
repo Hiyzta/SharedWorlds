@@ -54,6 +54,7 @@ public sealed class SharedWorldRegistryStore
 	public void Save()
 	{
 		lock (_lock) {
+			try {
 			SharedWorldPaths.EnsureCreated();
 
 			// The Host & Play server is a separate process sharing this save directory with the
@@ -66,7 +67,19 @@ public sealed class SharedWorldRegistryStore
 			string temp = RegistryPath + ".tmp";
 
 			File.WriteAllText(temp, json);
-			File.Move(temp, RegistryPath, overwrite: true);
+			for (int attempt = 0; attempt < 5; attempt++) {
+				try {
+					File.Move(temp, RegistryPath, overwrite: true);
+					break;
+				}
+				catch (IOException) when (attempt < 4) {
+					Thread.Sleep(50);
+				}
+			}
+			}
+			catch (Exception e) {
+				Log.Error("Could not save the Shared Worlds registry.", e);
+			}
 		}
 
 		Changed?.Invoke();
