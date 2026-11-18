@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/SharedWorlds/Core/Models.cs" Link="Models.cs" />
+    <Compile Include="../../src/SharedWorlds/Core/VersionGraph.cs" Link="VersionGraph.cs" />
+    <Compile Include="../../src/SharedWorlds/Core/HashUtil.cs" Link="HashUtil.cs" />
+    <Compile Include="../../src/SharedWorlds/Core/InviteCode.cs" Link="InviteCode.cs" />
+  </ItemGroup>
+</Project>

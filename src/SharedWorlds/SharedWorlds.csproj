@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>SharedWorlds</AssemblyName>
+    <RootNamespace>SharedWorlds</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <tMLSteamPath Condition="'$(tMLSteamPath)' == ''">$(TML_STEAM_PATH)</tMLSteamPath>
+  </PropertyGroup>
+
+  <!-- Optional local override; this file is gitignored. -->
+  <Import Project="$(MSBuildThisFileDirectory)Local.props" Condition="Exists('$(MSBuildThisFileDirectory)Local.props')" />
+
+  <Import Project="$(tMLSteamPath)/tMLMod.targets" Condition="Exists('$(tMLSteamPath)/tMLMod.targets')" />
+
+  <ItemGroup>
+    <Compile Remove="bin/**" />
+    <Compile Remove="obj/**" />
+    <None Remove="Local.props" />
+  </ItemGroup>
+
+  <Target Name="WarnMissingTml" BeforeTargets="Build" Condition="!Exists('$(tMLSteamPath)/tMLMod.targets')">
+    <Warning Text="tModLoader not found. Set tMLSteamPath (e.g. dotnet build -p:tMLSteamPath=/path/to/tModLoader) or create src/SharedWorlds/Local.props." />
+  </Target>
+</Project>

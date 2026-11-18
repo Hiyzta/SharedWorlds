@@ -1,0 +1,61 @@
+Configs: {
+	SharedWorldsConfig: {
+		DisplayName: Shared Worlds Config
+
+		Headers: {
+			Workshop: Workshop Header
+			LocalSafety: Local Safety Header
+			Interface: Interface Header
+		}
+
+		EnableWorkshopStorage: {
+			Label: Enable Workshop Storage
+			Tooltip: ""
+		}
+
+		AutoUploadOnWorldExit: {
+			Label: Auto Upload On World Exit
+			Tooltip: ""
+		}
+
+		UploadTimeoutSeconds: {
+			Label: Upload Timeout Seconds
+			Tooltip: ""
+		}
+
+		QueryTimeoutSeconds: {
+			Label: Query Timeout Seconds
+			Tooltip: ""
+		}
+
+		DownloadTimeoutSeconds: {
+			Label: Download Timeout Seconds
+			Tooltip: ""
+		}
+
+		MaxLocalBackups: {
+			Label: Max Local Backups
+			Tooltip: ""
+		}
+
+		MaxHistoryEntries: {
+			Label: Max History Entries
+			Tooltip: ""
+		}
+
+		ShowMainMenuButton: {
+			Label: Show Main Menu Button
+			Tooltip: ""
+		}
+
+		EnablePeerTransfer: {
+			Label: Enable Peer Transfer
+			Tooltip: ""
+		}
+
+		VerboseLogging: {
+			Label: Verbose Logging
+			Tooltip: ""
+		}
+	}
+}

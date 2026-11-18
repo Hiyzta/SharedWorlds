@@ -1,0 +1,20 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+artifacts/
+
+# tModLoader build output
+*.tmod
+*.tmod.pdb
+
+# Local machine settings (never commit)
+Local.props
+src/SharedWorlds/Local.props
+
+# OS noise
+.DS_Store
+Thumbs.db

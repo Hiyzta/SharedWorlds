@@ -1,0 +1,7 @@
+<Project>
+  <!-- Copy this file to Local.props and set the path to your tModLoader install.
+       The trailing slash matters for tMLMod.targets. -->
+  <PropertyGroup>
+    <tMLSteamPath>/path/to/tModLoader/</tMLSteamPath>
+  </PropertyGroup>
+</Project>

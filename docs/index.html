@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shared Worlds · a tModLoader multiplayer addon</title>
+  <meta name="description" content="Share one Terraria world between friends using per-account Steam Workshop snapshots. No server, no cloud drive, no always-on host.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">tModLoader · Terraria 1.4.4</p>
+      <h1>One world.<br>Any friend can host.</h1>
+      <p class="lede">
+        Shared Worlds keeps the newest Terraria world file in friends-only Steam Workshop items —
+        one per account — so the group can pass hosting around without a server, a VPS, a NAS,
+        or the original creator being online.
+      </p>
+      <div class="actions">
+        <a class="button primary" href="#how">How it works</a>
+        <a class="button" href="#install">Install</a>
+        <a class="button" href="https://github.com/deebabu/SharedWorlds">GitHub</a>
+      </div>
+      <p class="status">Status: 0.1.0 · early development · server-side snapshot path smoke-tested</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="wrap problem">
+      <h2>The problem</h2>
+      <p>
+        Terraria cannot merge two diverged worlds. If Alice plays alone and quits, only Alice's
+        machine has the newest <code>.wld</code> and <code>.twld</code>. Her friends cannot host it.
+        Steam Cloud is per-account. Steam Remote Play needs a host online. Somebody has to own the
+        latest file — and somebody has to be able to hand it to the next host.
+      </p>
+      <p class="callout">
+        Steam Workshop is the only always-on, Valve-hosted storage available here. But only the
+        owner of a Workshop item can push updates. Contributors are credit only. Sharing a Steam
+        login is not acceptable.
+      </p>
+    </section>
+
+    <section id="how" class="wrap">
+      <h2>How it works</h2>
+      <div class="steps">
+        <article>
+          <span class="step">01</span>
+          <h3>One item per account</h3>
+          <p>Every participant gets their own <strong>friends-only</strong> Workshop item for the world. One writer per item. No contributor permissions needed.</p>
+        </article>
+        <article>
+          <span class="step">02</span>
+          <h3>Snapshot on exit</h3>
+          <p>When the authoritative host saves and exits, the mod writes a compressed snapshot: <code>world.wld</code>, <code>world.twld</code>, and a <code>manifest.json</code> with version, hash, parent hash, mods, and participant item IDs.</p>
+        </article>
+        <article>
+          <span class="step">03</span>
+          <h3>Query, verify, host</h3>
+          <p>Before hosting, the mod reads version metadata from every known item, downloads only the newest candidate, verifies SHA-256, and starts Host &amp; Play.</p>
+        </article>
+        <article>
+          <span class="step">04</span>
+          <h3>Fast-forward, never merge</h3>
+          <p>If the candidate descends from the local version, it is a fast-forward. If the two branches are unrelated, the mod refuses to overwrite and shows a fork choice.</p>
+        </article>
+      </div>
+
+      <pre class="diagram" aria-label="Flow diagram">
+Alice ── save &amp; exit ──► snapshot vN ── upload ──► Alice's item (friends-only)
+                                                              ▲
+                                                              │ metadata query
+Bob ── sync / download ───────────────────────────────────────┘
+  │
+  └── Host &amp; Play ──► session ──► snapshot vN+1 ── upload ──► Bob's item
+                            │
+                            └── chunked ModPacket transfer to connected players</pre>
+
+      <div class="grid two">
+        <div class="card">
+          <h3>Version identity</h3>
+          <p><code>SHA256(SHA256(world.wld) || SHA256(world.twld))</code></p>
+          <p>Version numbers order the history; the hash and parent chain decide what is actually safe to install.</p>
+        </div>
+        <div class="card">
+          <h3>Metadata without downloads</h3>
+          <p>A 5000-byte Workshop metadata header carries the world ID, version, hash, parent, host, and participant items. The full manifest travels inside the snapshot.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap">
+      <h2>What you get</h2>
+      <ul class="features">
+        <li><strong>Shared Worlds screen</strong> on the main menu: versions, last host, sync status, invites.</li>
+        <li><strong>Host</strong> from any account. The original creator is not special.</li>
+        <li><strong>Open to friends</strong>: in-game panel → save → title → Host &amp; Play with friends-only lobby visibility.</li>
+        <li><strong>Fork detection</strong> with an explicit remote/local choice; the losing branch stays backed up.</li>
+        <li><strong>Peer transfer</strong> in 16 KB verified chunks during a session.</li>
+        <li><strong>Backups and retries</strong>: never swap an unverified file; keep pending uploads for later.</li>
+      </ul>
+    </section>
+
+    <section id="install" class="wrap">
+      <h2>Install</h2>
+      <div class="grid two">
+        <div class="card">
+          <h3>Workshop (after release)</h3>
+          <p>Subscribe in the tModLoader Workshop, enable <em>Shared Worlds</em>, reload mods. Items the mod creates are separate, friends-only storage items — not mods.</p>
+        </div>
+        <div class="card">
+          <h3>From source</h3>
+          <pre><code>git clone &lt;repo&gt; SharedWorlds
+cd SharedWorlds/src/SharedWorlds
+cp Local.props.example Local.props
+# set tMLSteamPath (trailing slash)
+dotnet build -c Release</code></pre>
+        </div>
+      </div>
+      <p class="fine">Requires tModLoader 1.4.4 stable 2026.09.x and a Steam-launched client. Participating accounts must be Steam friends.<br>
+      <a href="https://github.com/deebabu/SharedWorlds/blob/main/README.md">Full install and usage guide →</a></p>
+    </section>
+
+    <section class="wrap">
+      <h2>Architecture notes</h2>
+      <div class="grid three">
+        <div class="card">
+          <h3>Storage</h3>
+          <p>Steam Workshop items are opaque folders. tModLoader only treats folders containing <code>.tmod</code> as mods; our snapshots are ignored by its mod scanner.</p>
+        </div>
+        <div class="card">
+          <h3>Steam API reachability</h3>
+          <p>Mods compile against tModLoader's bundled Steamworks.NET, and tModLoader explicitly redirects that assembly to its own copy. Steam UGC is callable directly from mod code.</p>
+        </div>
+        <div class="card">
+          <h3>Host &amp; Play</h3>
+          <p>Terraria 1.4.4 starts a separate server process and reconnects the host client. Shared Worlds uses the game's own launcher, with a fallback to the normal Host &amp; Play screen.</p>
+        </div>
+        <div class="card">
+          <h3>One writer</h3>
+          <p>No API grants update rights to a collaborator. Per-account items are the only safe way to let every participant publish.</p>
+        </div>
+        <div class="card">
+          <h3>Safety</h3>
+          <p>Hash before swap; backup before install; temp file then atomic move; refuse downgrades unless the user explicitly resolves a fork.</p>
+        </div>
+        <div class="card">
+          <h3>No backend</h3>
+          <p>The mod writes only inside the tModLoader save directory. No HTTP, no telemetry, no always-on service.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap">
+      <h2>Limitations, honestly</h2>
+      <ul class="limits">
+        <li><strong>A host must be online to host.</strong> The original creator does not, but <em>some</em> participant does.</li>
+        <li><strong>Friendship is access.</strong> Friends-only items cannot be read by non-friends. Losing a friendship loses that account's latest snapshot.</li>
+        <li><strong>Propagation delay.</strong> A fresh upload can take a short while to become visible to other accounts. The mod retries and never installs unverified content.</li>
+        <li><strong>Private is owner-only.</strong> A private item cannot be the shared storage primitive; friends-only is the correct setting.</li>
+        <li><strong>No live conversion.</strong> “Open to friends” saves, returns to the title screen, and relaunches Host &amp; Play.</li>
+        <li><strong>Peer transfer is best-effort.</strong> It does not trap the host until every client ACKs; the Workshop snapshot is the durability guarantee.</li>
+        <li><strong>Policy risk.</strong> Non-mod items in the tModLoader Workshop are a grey area. They are clearly labelled, friends-only, and contain no executable content.</li>
+      </ul>
+    </section>
+
+    <section class="wrap faq">
+      <h2>FAQ</h2>
+      <details>
+        <summary>Does the original creator have to be online?</summary>
+        <p>No. Each participant writes to their own Workshop item. The newest version can come from any account that hosted and saved.</p>
+      </details>
+      <details>
+        <summary>Can two people host at the same time?</summary>
+        <p>They can, but they will create a fork. The mod detects it by hash/parent chain and refuses to silently overwrite either branch. The group chooses; the other branch stays in local backups.</p>
+      </details>
+      <details>
+        <summary>Why not one Workshop item with contributors?</summary>
+        <p>Steam has no API for contributor upload rights. Only the item owner can update it. Contributors on the web page are credit only.</p>
+      </details>
+      <details>
+        <summary>Why not Steam Cloud?</summary>
+        <p>Steam Cloud is per Steam account. There is no supported way to share a Cloud file with another account.</p>
+      </details>
+      <details>
+        <summary>What happens if Steam is offline?</summary>
+        <p>Workshop storage is unavailable. The mod keeps local snapshots, uses peer transfer while connected, and keeps a pending upload for later. It never deletes a local world because a remote item is missing.</p>
+      </details>
+      <details>
+        <summary>Is a Workshop storage item a mod?</summary>
+        <p>No. It is a folder containing the world and a manifest. It contains no <code>.tmod</code> and no executable code. Do not subscribe to it as a mod.</p>
+      </details>
+      <details>
+        <summary>How big are the uploads?</summary>
+        <p>Normal worlds are a few MB to roughly 15 MB. The mod caps snapshots at 64 MB uncompressed, compresses transfers, and uploads once per changed session.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>Shared Worlds is an unofficial fan project. Terraria and tModLoader belong to their respective owners.</p>
+      <p><a href="https://github.com/deebabu/SharedWorlds">GitHub</a> · <a href="https://github.com/deebabu/SharedWorlds/blob/main/docs/RESEARCH.md">Research</a> · <a href="https://github.com/deebabu/SharedWorlds/blob/main/docs/DECISIONS.md">Decision log</a> · MIT</p>
+    </div>
+  </footer>
+</body>
+</html>

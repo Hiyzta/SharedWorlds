@@ -1,0 +1,8 @@
+author = deebabu
+version = 0.1.0
+displayName = Shared Worlds
+side = Both
+homepage = https://github.com/deebabu/SharedWorlds
+description = Share one Terraria world between friends using per-account Steam Workshop snapshots, with peer transfer as a fallback.
+buildIgnore = *.csproj, *.user, obj\*, bin\*, .vs\*, .idea\*, Local.props
+includeSource = false

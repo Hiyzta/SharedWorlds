@@ -1,0 +1,13 @@
+Shared Worlds lets a group of friends share one Terraria world.
+
+Every participant gets their own private (friends-only) Steam Workshop item for the world. After each session the authoritative host uploads a compressed snapshot, and the next host downloads the newest snapshot before starting Host & Play. Steam friends, lobbies and peer-to-peer multiplayer still do the actual networking; this mod only decides where the newest world file lives.
+
+Features:
+- Shared Worlds menu on the main menu
+- Per-account Workshop storage (friends-only)
+- Version history, hash verification and local backups
+- Fork detection instead of silent overwrites
+- Peer-to-peer snapshot transfer during a session
+- "Open to friends" Host & Play launcher
+
+The original creator is not special: anyone in the group can host and make progress.

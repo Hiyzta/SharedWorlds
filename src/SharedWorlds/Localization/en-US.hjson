@@ -1,0 +1,13 @@
+Mods: {
+	SharedWorlds: {
+		Configs: {
+			SharedWorldsConfig: {
+				Headers: {
+					Workshop: Workshop
+					LocalSafety: Local safety
+					Interface: Interface
+				}
+			}
+		}
+	}
+}
