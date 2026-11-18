@@ -118,8 +118,19 @@ public sealed class SharedWorldsService
 		if (Main.netMode == NetmodeID.MultiplayerClient)
 			_loadedAsMultiplayerClient = true;
 
-		if (Registry.FindByWorldId(worldId) != null)
+		SharedWorldRecord? existing = Registry.FindByWorldId(worldId);
+		if (existing != null) {
+			string? loadedName = Main.worldPathName == null ? null : Path.GetFileName(Main.worldPathName);
+			if (Main.netMode != NetmodeID.MultiplayerClient &&
+				!string.IsNullOrWhiteSpace(loadedName) &&
+				!string.Equals(existing.WorldFileName, loadedName, StringComparison.OrdinalIgnoreCase)) {
+				existing.WorldFileName = loadedName;
+				Registry.Update(existing);
+				Registry.Save();
+			}
+
 			return;
+		}
 
 		// Registry was lost or this world arrived from a snapshot/peer transfer. Recover a
 		// registration from the world file itself, but never do this on a multiplayer client

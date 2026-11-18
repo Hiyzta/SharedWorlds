@@ -528,12 +528,12 @@ public sealed class SharedWorldDetailUIState : UIState
 			return "\n\nNo version history recorded yet.";
 
 		var sb = new System.Text.StringBuilder("\n\nVersion history (newest first):\n");
-		foreach (VersionRecord version in _record.History.OrderByDescending(v => v.Version).Take(20)) {
+		foreach (VersionRecord version in _record.History.OrderByDescending(v => v.Version).Take(12)) {
 			sb.AppendLine($"  v{version.Version}  {HashUtil.Short(version.Hash)}  parent {HashUtil.Short(version.ParentHash)}  host {WorkshopService.PersonaName(version.HostSteamId)}  {version.TimestampUtc:yyyy-MM-dd HH:mm} UTC");
 		}
 
-		if (_record.History.Count > 20)
-			sb.AppendLine($"  ... and {_record.History.Count - 20} older record(s)");
+		if (_record.History.Count > 12)
+			sb.AppendLine($"  ... and {_record.History.Count - 12} older record(s)");
 
 		return sb.ToString();
 	}
