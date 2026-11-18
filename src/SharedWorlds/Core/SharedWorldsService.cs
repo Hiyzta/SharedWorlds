@@ -12,9 +12,12 @@ public sealed class SharedWorldsService
 
 	public SharedWorldRegistryStore Registry { get; } = new();
 
+	private static readonly SemaphoreSlim UploadGate = new(1, 1);
+
 	private string _currentWorldId = "";
 	private string _sessionStartHash = "";
 	private int _sessionStartVersion;
+	private bool _loadedAsMultiplayerClient;
 	private DateTime _pendingOpenToFriendsSince;
 
 	public string CurrentWorldId => _currentWorldId;
@@ -111,6 +114,10 @@ public sealed class SharedWorldsService
 			return;
 
 		_currentWorldId = worldId;
+
+		if (Main.netMode == NetmodeID.MultiplayerClient)
+			_loadedAsMultiplayerClient = true;
+
 		if (Registry.FindByWorldId(worldId) != null)
 			return;
 
@@ -148,6 +155,7 @@ public sealed class SharedWorldsService
 		_currentWorldId = "";
 		_sessionStartHash = "";
 		_sessionStartVersion = 0;
+		_loadedAsMultiplayerClient = Main.netMode == NetmodeID.MultiplayerClient;
 
 		string? path = Main.worldPathName;
 		if (string.IsNullOrWhiteSpace(path))
@@ -177,12 +185,36 @@ public sealed class SharedWorldsService
 		}
 
 		LastStatus = $"Loaded shared world '{record.WorldName}' (local v{record.LocalVersion}).";
+
+		if (Main.netMode == NetmodeID.SinglePlayer && Config.EnableWorkshopStorage && record.WorkshopStorageEnabled) {
+			_ = Task.Run(async () => {
+				try {
+					SharedWorldRecord? fresh = Registry.FindByWorldId(record.WorldId);
+					if (fresh == null)
+						return;
+
+					SyncReport report = await SyncAsync(fresh, downloadIfNewer: false).ConfigureAwait(false);
+					if (report.Status is SyncStatus.RemoteNewer or SyncStatus.Fork or SyncStatus.Error) {
+						string message = report.Status == SyncStatus.Fork
+							? $"Shared Worlds: '{fresh.WorldName}' has diverged from a published version. Save & exit and use the Shared Worlds screen before making more progress."
+							: $"Shared Worlds: a newer snapshot of '{fresh.WorldName}' is available. Save & exit and sync before making more progress.";
+						Main.QueueMainThreadAction(() => Main.NewText(message, 255, 210, 140));
+					}
+					else if (fresh.PendingUpload) {
+						Main.QueueMainThreadAction(() => Main.NewText($"Shared Worlds: a previous snapshot of '{fresh.WorldName}' is still waiting to upload.", 255, 210, 140));
+					}
+				}
+				catch (Exception e) {
+					Log.Warn("Could not check for a newer shared-world snapshot on load.", e);
+				}
+			});
+		}
 	}
 
 	/// <summary>Called after the authoritative save. Builds and (when possible) uploads the snapshot.</summary>
 	public void OnWorldUnload()
 	{
-		int netMode = Main.netMode;
+		bool loadedAsClient = _loadedAsMultiplayerClient;
 		string? worldPath = Main.worldPathName;
 		string? currentId = _currentWorldId;
 		string parentHash = _sessionStartHash;
@@ -190,6 +222,7 @@ public sealed class SharedWorldsService
 
 		_currentWorldId = "";
 		_sessionStartHash = "";
+		_loadedAsMultiplayerClient = false;
 
 		if (string.IsNullOrWhiteSpace(currentId) || string.IsNullOrWhiteSpace(worldPath))
 			return;
@@ -204,11 +237,10 @@ public sealed class SharedWorldsService
 			return;
 		}
 
-		// A multiplayer client is not authoritative. Never upload its in-memory copy.
-		if (netMode == NetmodeID.MultiplayerClient)
-			return;
-
-		if (netMode != NetmodeID.SinglePlayer && netMode != NetmodeID.Server)
+		// A multiplayer client is not authoritative. Main.netMode may already be 0 by the
+		// time OnWorldUnload runs (Terraria resets it during disconnect), so use the mode
+		// captured at world load instead.
+		if (loadedAsClient)
 			return;
 
 		string twldPath = Path.ChangeExtension(worldPath, ".twld");
@@ -353,6 +385,33 @@ public sealed class SharedWorldsService
 	}
 
 	public async Task<UploadResult> UploadSnapshotAsync(
+		SharedWorldRecord record,
+		string snapshotDir,
+		SnapshotManifest manifest,
+		IProgress<(float, string)>? progress,
+		CancellationToken token)
+	{
+		await UploadGate.WaitAsync(token).ConfigureAwait(false);
+		try {
+			// A background upload of an older snapshot must not overwrite a newer local snapshot.
+			SharedWorldRecord? latest = Registry.FindByWorldId(record.WorldId);
+			if (latest != null && latest.LocalVersion > manifest.Version) {
+				return new UploadResult {
+					Success = false,
+					Pending = true,
+					ItemId = record.WorkshopItemId,
+					Message = $"Skipped uploading older v{manifest.Version}; local v{latest.LocalVersion} is newer."
+				};
+			}
+
+			return await UploadSnapshotCoreAsync(record, snapshotDir, manifest, progress, token).ConfigureAwait(false);
+		}
+		finally {
+			UploadGate.Release();
+		}
+	}
+
+	private async Task<UploadResult> UploadSnapshotCoreAsync(
 		SharedWorldRecord record,
 		string snapshotDir,
 		SnapshotManifest manifest,
@@ -922,8 +981,10 @@ public sealed class SharedWorldsService
 
 	public string CreateInvite(SharedWorldRecord record)
 	{
-		ulong owner = record.LastHostSteamId != 0 ? record.LastHostSteamId : WorkshopService.CurrentSteamId;
-		if (record.WorkshopItemId == 0)
+		ulong owner = WorkshopService.CurrentSteamId;
+		if (owner == 0)
+			owner = record.LastHostSteamId;
+		if (owner == 0 || record.WorkshopItemId == 0)
 			return "";
 
 		return InviteCode.Create(record.WorldId, owner, record.WorkshopItemId, record.WorldName);

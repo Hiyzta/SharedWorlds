@@ -216,3 +216,33 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 **Decision:** README, Pages and CI are for distribution/development only. The mod reads only local tML save data and Steam APIs. No HTTP calls, no telemetry, no backend.
 
 **Why:** Project constraint and tModLoader Mod Upload Rules.
+
+---
+
+## D-019 — Authoritative-side detection uses the mode captured at world load
+
+**Decision:** Record whether the world was loaded as a multiplayer client in `OnWorldLoad`/`NetReceive`. `OnWorldUnload` uses that flag, not the current `Main.netMode`, to decide whether to snapshot/upload.
+
+**Why:** Terraria resets `Main.netMode` to 0 during a multiplayer client disconnect **before** calling `OnWorldUnload`. Checking the current value would make a client look like single-player and risk uploading its non-authoritative copy. The server process is netMode 2 and single-player is 0, so both remain authoritative.
+
+**Consequence:** A client never snapshots or uploads. The Host & Play server process does, after its own save.
+
+---
+
+## D-020 — Workshop uploads are serialized; stale uploads are skipped
+
+**Decision:** A static upload gate allows one Workshop upload at a time. After acquiring it, the mod refreshes the world's registry entry and skips the upload if the local version is newer than the snapshot being uploaded.
+
+**Why:** A slow background "sync & publish" upload can overlap a session-end upload. Without serialization/ordering, the older upload could commit last and leave the item on an older version.
+
+**Consequence:** A very slow upload may delay a later one, but versions cannot move backwards on the item. The newer snapshot is kept pending/uploaded next.
+
+---
+
+## D-021 — Stale-copy warning on single-player load
+
+**Decision:** When a registered world is loaded in single-player, the mod asynchronously checks known items (metadata only, no download) and shows an in-game warning if a newer or diverged version is known, or if a previous upload is pending. It does not block the load.
+
+**Why:** The primary entry point is the Shared Worlds screen, but players can still double-click a world in the normal list. A warning plus fork detection is safer than silently allowing an avoidable fork.
+
+**Consequence:** The check is best-effort (Steam/network may be unavailable) and the message tells the player to save & exit and sync. It is not a hard gate, so a player can still choose to create a fork deliberately.

@@ -131,7 +131,7 @@ public static class SnapshotService
 				History = history
 			};
 
-			if (record.WorkshopItemId != 0)
+			if (hostSteamId != 0 && record.WorkshopItemId != 0)
 				manifest.Participants[hostSteamId.ToString()] = record.WorkshopItemId;
 
 			WriteManifest(dir, manifest);
@@ -169,7 +169,14 @@ public static class SnapshotService
 			if (!File.Exists(path))
 				return null;
 
-			return JsonSerializer.Deserialize<SnapshotManifest>(File.ReadAllText(path), JsonOptions);
+			SnapshotManifest? manifest = JsonSerializer.Deserialize<SnapshotManifest>(File.ReadAllText(path), JsonOptions);
+			if (manifest != null) {
+				manifest.Participants ??= new Dictionary<string, ulong>();
+				manifest.History ??= new List<VersionRecord>();
+				manifest.Mods ??= new List<ModEntry>();
+			}
+
+			return manifest;
 		}
 		catch (Exception e) {
 			Log.Warn($"Could not read snapshot manifest from {dir}.", e);
