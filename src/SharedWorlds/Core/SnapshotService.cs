@@ -243,8 +243,9 @@ public static class SnapshotService
 		}
 
 		try {
+			string? backupDir = null;
 			if (keepBackup && (File.Exists(worldPath) || File.Exists(twldPath)))
-				BackupCurrent(record, worldPath, twldPath, maxBackups);
+				backupDir = BackupCurrent(record, worldPath, twldPath, maxBackups);
 
 			Directory.CreateDirectory(Path.GetDirectoryName(worldPath)!);
 
@@ -261,8 +262,23 @@ public static class SnapshotService
 				return false;
 			}
 
-			File.Move(tempWld, worldPath, overwrite: true);
-			File.Move(tempTwld, twldPath, overwrite: true);
+			bool worldMoved = false;
+			try {
+				File.Move(tempWld, worldPath, overwrite: true);
+				worldMoved = true;
+				File.Move(tempTwld, twldPath, overwrite: true);
+			}
+			catch {
+				if (worldMoved && backupDir != null)
+					try {
+						if (File.Exists(Path.Combine(backupDir, "world.wld")))
+							File.Copy(Path.Combine(backupDir, "world.wld"), worldPath, overwrite: true);
+						if (File.Exists(Path.Combine(backupDir, "world.twld")))
+							File.Copy(Path.Combine(backupDir, "world.twld"), twldPath, overwrite: true);
+					}
+					catch { }
+				throw;
+			}
 
 			record.LocalVersion = manifest.Version;
 			record.LocalHash = manifest.ContentHash;
@@ -288,11 +304,11 @@ public static class SnapshotService
 		}
 	}
 
-	public static void BackupCurrent(SharedWorldRecord record, string worldPath, string twldPath, int maxBackups)
+	public static string? BackupCurrent(SharedWorldRecord record, string worldPath, string twldPath, int maxBackups)
 	{
 		try {
 			if (!File.Exists(worldPath) && !File.Exists(twldPath))
-				return;
+				return null;
 
 			string dir = SharedWorldPaths.BackupDir(record.WorldId, record.LocalVersion);
 			Directory.CreateDirectory(dir);
@@ -319,9 +335,11 @@ public static class SnapshotService
 			}
 
 			PruneBackups(record.WorldId, maxBackups);
+			return dir;
 		}
 		catch (Exception e) {
 			Log.Warn("Could not create a local world backup.", e);
+			return null;
 		}
 	}
 

@@ -372,7 +372,7 @@ public sealed class SharedWorldPickerUIState : UIState
 
 		panel.Append(SharedWorldsUIState.MakeButton("Back", 640, 500, 100, GoBack));
 
-		foreach (WorldFileData world in Main.WorldList.OrderBy(w => w.Name)) {
+		foreach (WorldFileData world in Main.WorldList.Where(w => w.IsValid).OrderBy(w => w.Name)) {
 			bool registered = SharedWorldsService.Instance.FindByFileName(Path.GetFileName(world.Path)) != null;
 			string suffix = world.IsCloudSave ? "  (Steam Cloud - unsupported)"
 				: registered ? "  (already shared)"

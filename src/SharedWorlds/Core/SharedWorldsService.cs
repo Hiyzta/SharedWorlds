@@ -55,6 +55,11 @@ public sealed class SharedWorldsService
 			return null!;
 		}
 
+		if (!data.IsValid) {
+			error = "That world file is not valid and cannot be registered.";
+			return null!;
+		}
+
 		if (data.IsCloudSave) {
 			error = "Steam Cloud worlds are not supported for sharing yet. Move the world to local storage first.";
 			return null!;
