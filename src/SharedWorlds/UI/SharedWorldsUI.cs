@@ -226,11 +226,19 @@ public sealed class SharedWorldsUIState : UIState
 
 	private void OnImportSubmitted(string text)
 	{
-		SharedWorldRecord? record = SharedWorldsService.Instance.ImportInvite(text, out string error);
-		Main.MenuUI.SetState(this);
-		Main.menuMode = 888;
-		RefreshList();
-		_status.SetText(record == null ? "Import failed: " + error : $"Imported '{record.WorldName}'. Use Sync to download the newest snapshot.");
+		try {
+			SharedWorldRecord? record = SharedWorldsService.Instance.ImportInvite(text, out string error);
+			Main.MenuUI.SetState(this);
+			Main.menuMode = 888;
+			RefreshList();
+			_status.SetText(record == null ? "Import failed: " + error : $"Imported '{record.WorldName}'. Use Sync to download the newest snapshot.");
+		}
+		catch (Exception e) {
+			Log.Error("Could not import a shared-world invite.", e);
+			Main.MenuUI.SetState(this);
+			Main.menuMode = 888;
+			_status.SetText("Import failed: " + e.Message);
+		}
 	}
 
 	public void CopyInvite(SharedWorldRecord record)
@@ -386,10 +394,16 @@ public sealed class SharedWorldPickerUIState : UIState
 			if (!registered && !world.IsCloudSave) {
 				button.OnLeftClick += (_, _) => {
 					SoundEngine.PlaySound(SoundID.MenuTick);
-					SharedWorldRecord record = SharedWorldsService.Instance.RegisterWorld(world, out string error);
-					Main.MenuUI.SetState(_parent);
-					Main.menuMode = 888;
-					_parent.ShowStatus(record == null ? "Could not register: " + error : $"Registered '{record.WorldName}'. Host it once and save to publish the first snapshot.");
+					try {
+						SharedWorldRecord record = SharedWorldsService.Instance.RegisterWorld(world, out string error);
+						Main.MenuUI.SetState(_parent);
+						Main.menuMode = 888;
+						_parent.ShowStatus(record == null ? "Could not register: " + error : $"Registered '{record.WorldName}'. Host it once and save to publish the first snapshot.");
+					}
+					catch (Exception e) {
+						Log.Error("Could not register a shared world.", e);
+						_parent.ShowStatus("Could not register: " + e.Message);
+					}
 				};
 			}
 
@@ -458,8 +472,14 @@ public sealed class SharedWorldDetailUIState : UIState
 
 			_parent.ShowStatus("Uploading pending snapshot...");
 			_ = Task.Run(async () => {
-				UploadResult result = await SharedWorldsService.Instance.PublishNowAsync(_record, null, CancellationToken.None);
-				Main.QueueMainThreadAction(() => _parent.ShowStatus(result.Success ? "Published pending snapshot." : "Upload pending: " + result.Message));
+				try {
+					UploadResult result = await SharedWorldsService.Instance.PublishNowAsync(_record, null, CancellationToken.None);
+					Main.QueueMainThreadAction(() => _parent.ShowStatus(result.Success ? "Published pending snapshot." : "Upload pending: " + result.Message));
+				}
+				catch (Exception e) {
+					Log.Error("Pending Workshop upload failed.", e);
+					Main.QueueMainThreadAction(() => _parent.ShowStatus("Upload pending: " + e.Message));
+				}
 			});
 		}));
 

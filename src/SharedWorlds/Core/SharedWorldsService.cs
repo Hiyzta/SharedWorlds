@@ -998,8 +998,6 @@ public sealed class SharedWorldsService
 	public string CreateInvite(SharedWorldRecord record)
 	{
 		ulong owner = WorkshopService.CurrentSteamId;
-		if (owner == 0)
-			owner = record.LastHostSteamId;
 		if (owner == 0 || record.WorkshopItemId == 0)
 			return "";
 

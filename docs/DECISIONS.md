@@ -246,3 +246,13 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 **Why:** The primary entry point is the Shared Worlds screen, but players can still double-click a world in the normal list. A warning plus fork detection is safer than silently allowing an avoidable fork.
 
 **Consequence:** The check is best-effort (Steam/network may be unavailable) and the message tells the player to save & exit and sync. It is not a hard gate, so a player can still choose to create a fork deliberately.
+
+---
+
+## D-022 — Registry saves merge on-disk state under a cross-process lock
+
+**Decision:** The registry write path acquires a short exclusive lock (`registry.json.lock`), re-reads the on-disk registry, merges participants/version history/local heads, then writes atomically. The Host & Play server and the host client are separate processes sharing the same save directory.
+
+**Why:** Without merging, the server's shutdown write could drop a client-side participant update, or a client write could hide the server's new snapshot. The lock prevents torn read-modify-write cycles; the merge keeps both sides' data.
+
+**Consequence:** The merge is intentionally conservative: it never lowers a local version, unions history by hash, and prefers nonzero participant item IDs. It is not a distributed consensus protocol; the group's single-writer-at-a-time rule is still what prevents forks.

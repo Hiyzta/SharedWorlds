@@ -134,6 +134,7 @@ Invite codes contain the world ID, owner Steam ID, owner Workshop item ID, and w
 
 1. The friend opens **Shared Worlds**, selects the world and presses **Host**.
 2. The mod queries all known participant items, downloads the newest verified snapshot if needed, and starts **Host & Play**.
+   Use this screen (or the in-game F9 panel) rather than the normal Host & Play button: the normal button does not run the pre-host sync.
 3. If a fork is detected, hosting is refused until the group chooses a version in **Info → Use remote** (or keeps the local branch).
 4. When the session ends, the friend's own Workshop item receives vN+1. The original creator does not need to be online.
 
@@ -176,6 +177,7 @@ The in-game **F9** panel has **Sync & publish**. It asks the server to save the 
 - **Friendship is part of storage access.** If you unfriend an owner, you lose access to that owner's latest item. Keep more than one participant up to date.
 - **Workshop propagation delay.** A just-uploaded version may take a short time to appear in other accounts' queries. The mod retries and reports "uploaded, waiting for Steam". It never swaps in unverified content.
 - **A host must be online to host.** The mod removes the need for the *original creator* or an always-on server; it cannot remove the need for *some* player to be online during a session.
+- **Use the Shared Worlds Host button.** The normal Host & Play button bypasses the pre-host Workshop check. A load-time warning and fork detection still protect you, but the intended path checks first.
 - **No Steam Cloud worlds** in 0.1.0. Move the world to local storage first.
 - **No live single-player → multiplayer conversion.** Host & Play is a separate process.
 - **No hard "wait for everyone" quit gate.** Peer transfer is best-effort; the Workshop upload is the durability guarantee.

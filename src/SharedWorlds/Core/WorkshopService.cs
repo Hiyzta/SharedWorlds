@@ -415,12 +415,16 @@ public static class WorkshopService
 			return new UploadResult { Success = false, Message = "Steam rejected the Workshop item update handle." };
 
 		try {
-			SteamUGC.SetItemTitle(handle, Truncate(title, Constants.k_cchPublishedDocumentTitleMax - 1));
+			SteamUGC.SetItemTitle(handle, Truncate(title, 100));
 			SteamUGC.SetItemDescription(handle, Truncate(description, Constants.k_cchPublishedDocumentDescriptionMax - 1));
 			SteamUGC.SetItemUpdateLanguage(handle, "english");
-			SteamUGC.SetItemVisibility(handle, ERemoteStoragePublishedFileVisibility.k_ERemoteStoragePublishedFileVisibilityFriendsOnly);
-			SteamUGC.SetItemContent(handle, contentFolder);
-			SteamUGC.SetItemMetadata(handle, metadataJson);
+
+			if (!SteamUGC.SetItemVisibility(handle, ERemoteStoragePublishedFileVisibility.k_ERemoteStoragePublishedFileVisibilityFriendsOnly))
+				return new UploadResult { Success = false, Pending = true, ItemId = itemId, Message = "Steam refused to set the item to friends-only." };
+			if (!SteamUGC.SetItemContent(handle, contentFolder))
+				return new UploadResult { Success = false, Pending = true, ItemId = itemId, Message = "Steam refused the snapshot content folder." };
+			if (!SteamUGC.SetItemMetadata(handle, metadataJson))
+				return new UploadResult { Success = false, Pending = true, ItemId = itemId, Message = "Steam refused the version metadata (5000-byte limit)." };
 
 			// Searchable tags. Keys/values are limited to 255 chars and 100 tags per update.
 			SteamUGC.RemoveItemKeyValueTags(handle, "sharedworld");

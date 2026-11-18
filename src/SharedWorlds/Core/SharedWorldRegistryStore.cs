@@ -56,6 +56,12 @@ public sealed class SharedWorldRegistryStore
 		lock (_lock) {
 			SharedWorldPaths.EnsureCreated();
 
+			// The Host & Play server is a separate process sharing this save directory with the
+			// client. A short cross-process lock plus a merge prevents one process from silently
+			// dropping the other's participants/history.
+			using FileStream? fileLock = TryAcquireFileLock();
+			MergeFromDisk();
+
 			string json = JsonSerializer.Serialize(_data, JsonOptions);
 			string temp = RegistryPath + ".tmp";
 
@@ -64,6 +70,104 @@ public sealed class SharedWorldRegistryStore
 		}
 
 		Changed?.Invoke();
+	}
+
+	private FileStream? TryAcquireFileLock()
+	{
+		for (int i = 0; i < 40; i++) {
+			try {
+				return new FileStream(RegistryPath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+			}
+			catch (IOException) {
+				Thread.Sleep(50);
+			}
+			catch (UnauthorizedAccessException) {
+				break;
+			}
+		}
+
+		Log.Warn("Could not acquire the Shared Worlds registry lock; writing anyway.");
+		return null;
+	}
+
+	private void MergeFromDisk()
+	{
+		try {
+			if (!File.Exists(RegistryPath))
+				return;
+
+			SharedWorldRegistry? disk = JsonSerializer.Deserialize<SharedWorldRegistry>(File.ReadAllText(RegistryPath), JsonOptions);
+			if (disk?.Worlds == null)
+				return;
+
+			foreach (SharedWorldRecord diskRecord in disk.Worlds) {
+				SharedWorldRecord? memoryRecord = _data.Worlds.FirstOrDefault(w =>
+					string.Equals(w.WorldId, diskRecord.WorldId, StringComparison.OrdinalIgnoreCase));
+
+				if (memoryRecord == null) {
+					_data.Worlds.Add(diskRecord);
+					continue;
+				}
+
+				MergeRecords(memoryRecord, diskRecord);
+			}
+		}
+		catch (Exception e) {
+			Log.Warn("Could not merge the on-disk registry before saving; keeping in-memory state.", e);
+		}
+	}
+
+	private static void MergeRecords(SharedWorldRecord target, SharedWorldRecord other)
+	{
+		foreach (KeyValuePair<string, ulong> participant in other.Participants ?? new()) {
+			if (string.IsNullOrWhiteSpace(participant.Key))
+				continue;
+
+			if (!target.Participants.TryGetValue(participant.Key, out ulong current) ||
+				(current == 0 && participant.Value != 0))
+				target.Participants[participant.Key] = participant.Value;
+		}
+
+		foreach (VersionRecord version in other.History ?? new()) {
+			if (target.History.All(v => !string.Equals(v.Hash, version.Hash, StringComparison.OrdinalIgnoreCase)))
+				target.History.Add(version);
+		}
+
+		target.History = target.History
+			.OrderBy(v => v.Version)
+			.ThenBy(v => v.TimestampUtc)
+			.GroupBy(v => v.Hash, StringComparer.OrdinalIgnoreCase)
+			.Select(g => g.First())
+			.ToList();
+
+		if (other.LocalVersion > target.LocalVersion) {
+			target.LocalVersion = other.LocalVersion;
+			target.LocalHash = other.LocalHash;
+			target.LastParentHash = other.LastParentHash;
+			target.LastHostSteamId = other.LastHostSteamId;
+			target.LastUpdatedUtc = other.LastUpdatedUtc;
+			target.Mods = other.Mods ?? target.Mods;
+			target.PendingUpload = other.PendingUpload;
+			target.PendingSnapshotDir = other.PendingSnapshotDir;
+			target.PendingVersion = other.PendingVersion;
+			target.PendingHash = other.PendingHash;
+		}
+
+		if (string.IsNullOrWhiteSpace(target.WorldFileName) && !string.IsNullOrWhiteSpace(other.WorldFileName))
+			target.WorldFileName = other.WorldFileName;
+
+		if (string.IsNullOrWhiteSpace(target.WorldName) && !string.IsNullOrWhiteSpace(other.WorldName))
+			target.WorldName = other.WorldName;
+
+		if (target.WorkshopItemId == 0 && other.WorkshopItemId != 0)
+			target.WorkshopItemId = other.WorkshopItemId;
+
+		if (!target.PendingUpload && other.PendingUpload) {
+			target.PendingUpload = true;
+			target.PendingSnapshotDir = other.PendingSnapshotDir;
+			target.PendingVersion = other.PendingVersion;
+			target.PendingHash = other.PendingHash;
+		}
 	}
 
 	public List<SharedWorldRecord> Snapshot()
