@@ -95,6 +95,20 @@ public static class SnapshotService
 			};
 
 			history.RemoveAll(v => string.Equals(v.Hash, hash, StringComparison.OrdinalIgnoreCase));
+
+			if (!string.IsNullOrWhiteSpace(parentHash) &&
+				history.All(v => !string.Equals(v.Hash, parentHash, StringComparison.OrdinalIgnoreCase))) {
+				// Preserve the parent link even if the local registry lost the parent's record.
+				history.Add(new VersionRecord {
+					Version = Math.Max(0, version - 1),
+					Hash = parentHash,
+					ParentHash = "",
+					HostSteamId = record.LastHostSteamId,
+					TimestampUtc = record.LastUpdatedUtc,
+					WorldName = record.WorldName
+				});
+			}
+
 			history.Add(thisVersion);
 			history = history
 				.OrderBy(v => v.Version)

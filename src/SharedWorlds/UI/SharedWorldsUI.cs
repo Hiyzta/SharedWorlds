@@ -143,14 +143,8 @@ public sealed class SharedWorldsUIState : UIState
 			string worldId = _hostAfterSync;
 			_hostAfterSync = "";
 			SharedWorldRecord? record = SharedWorldsService.Instance.Registry.FindByWorldId(worldId);
-			if (record != null) {
-				if (HostAndPlay.Start(record, out string error)) {
-					SharedWorldsUI.Close();
-				}
-				else {
-					_status.SetText(error);
-				}
-			}
+			if (record != null && !HostAndPlay.Start(record, out string error))
+				_status.SetText(error);
 		}
 		else {
 			_hostAfterSync = "";
