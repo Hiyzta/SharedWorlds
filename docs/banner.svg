@@ -47,7 +47,7 @@
     <rect x="232" y="244" width="142" height="34" rx="17" fill="#102c3f" stroke="#1e4b61"/>
     <text x="303" y="266" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="600" fill="#f2b84b">MIT licensed</text>
     <rect x="386" y="244" width="104" height="34" rx="17" fill="#102c3f" stroke="#1e4b61"/>
-    <text x="438" y="266" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="600" fill="#6ad4e8">v0.1.4</text>
+    <text x="438" y="266" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="600" fill="#6ad4e8">v0.2.0</text>
   </g>
 
   <rect x="0" y="316" width="1200" height="4" fill="url(#accent)" opacity="0.9"/>

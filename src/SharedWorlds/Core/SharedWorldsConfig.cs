@@ -41,6 +41,17 @@ public sealed class SharedWorldsConfig : ModConfig
 	[Range(30, 600)]
 	public int DownloadTimeoutSeconds { get; set; } = 180;
 
+	[Header("LiveSession")]
+	[DefaultValue(true)]
+	public bool AutoUploadWhilePlaying { get; set; } = true;
+
+	[DefaultValue(10)]
+	[Range(5, 60)]
+	public int AutoUploadIntervalMinutes { get; set; } = 10;
+
+	[DefaultValue(true)]
+	public bool EnableHostMigration { get; set; } = true;
+
 	[Header("LocalSafety")]
 	[DefaultValue(8)]
 	[Range(0, 50)]

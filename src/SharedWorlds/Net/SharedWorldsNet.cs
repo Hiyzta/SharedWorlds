@@ -1,7 +1,10 @@
 using System.IO;
+using Steamworks;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
+using Terraria.Net;
+using Terraria.Social;
 using SharedWorlds.Core;
 
 namespace SharedWorlds.Net;
@@ -11,11 +14,14 @@ public static class SharedWorldsNet
 	private const byte MsgHello = 1;
 	private const byte MsgClientItem = 2;
 	private const byte MsgRequestSnapshot = 3;
+	private const byte MsgSession = 4;
 	private const byte MsgSnapshotStart = 10;
 	private const byte MsgSnapshotChunk = 11;
 	private const byte MsgSnapshotEnd = 12;
 	private const byte MsgSnapshotAck = 13;
 	private const byte MsgNotice = 14;
+
+	private static DateTime _lastSessionBroadcastUtc = DateTime.MinValue;
 
 	public static void HandlePacket(Mod mod, BinaryReader reader, int whoAmI)
 	{
@@ -24,6 +30,9 @@ public static class SharedWorldsNet
 			switch (type) {
 				case MsgHello:
 					ClientHandleHello(reader);
+					break;
+				case MsgSession:
+					ClientHandleSession(reader);
 					break;
 				case MsgClientItem:
 					ServerHandleClientItem(reader, whoAmI);
@@ -58,8 +67,14 @@ public static class SharedWorldsNet
 
 	public static void Tick()
 	{
-		if (Main.netMode == NetmodeID.Server)
+		if (Main.netMode == NetmodeID.Server) {
 			PeerTransferService.TickServer();
+
+			if ((DateTime.UtcNow - _lastSessionBroadcastUtc).TotalSeconds >= 5) {
+				_lastSessionBroadcastUtc = DateTime.UtcNow;
+				BroadcastSession();
+			}
+		}
 	}
 
 	private static ModPacket NewPacket(byte type, int capacity = 1024)
@@ -76,7 +91,12 @@ public static class SharedWorldsNet
 			if (record == null)
 				return;
 
-			ModPacket packet = NewPacket(MsgHello, 4096);
+			List<ulong> roster = GetConnectedSteamIds();
+			ulong hostSteamId = WorkshopService.CurrentSteamId;
+			if (hostSteamId == 0)
+				hostSteamId = record.LastHostSteamId;
+
+			ModPacket packet = NewPacket(MsgHello, 8192);
 			packet.Write(record.WorldId);
 			packet.Write(record.WorldName);
 			packet.Write(record.LocalVersion);
@@ -90,6 +110,10 @@ public static class SharedWorldsNet
 				packet.Write(participant.Value);
 			}
 
+			packet.Write(hostSteamId);
+			packet.Write(GetLobbyId());
+			packet.Write(record.LastUpdatedUtc.Ticks);
+			WriteRoster(packet, roster);
 			packet.Send(toClient: whoAmI);
 		}
 		catch (Exception e) {
@@ -118,8 +142,24 @@ public static class SharedWorldsNet
 			participants[steamId] = itemId;
 		}
 
+		ulong hostSteamId = reader.ReadUInt64();
+		ulong lobbyId = reader.ReadUInt64();
+		long snapshotTicks = reader.ReadInt64();
+		List<ulong> roster = ReadRoster(reader);
+
 		SharedWorldRecord record = SharedWorldsService.Instance.EnsureRemoteWorld(worldId, worldName, lastHost, participants);
-		Log.Info($"Joined shared world '{record.WorldName}' (host v{version}, {HashUtil.Short(hash)}).");
+		SharedWorldsSessionState.Set(new SharedWorldsLiveSession {
+			WorldId = worldId,
+			WorldName = record.WorldName,
+			HostSteamId = hostSteamId,
+			LobbyId = lobbyId,
+			Version = version,
+			ContentHash = hash,
+			SnapshotUtc = snapshotTicks <= 0 ? default : new DateTime(snapshotTicks, DateTimeKind.Utc),
+			Roster = roster
+		});
+
+		Log.Info($"Joined shared world '{record.WorldName}' (host {WorkshopService.PersonaName(hostSteamId)}, live v{version}, {HashUtil.Short(hash)}).");
 
 		if (WorkshopService.CurrentSteamId != 0) {
 			ModPacket packet = NewPacket(MsgClientItem, 128);
@@ -127,6 +167,132 @@ public static class SharedWorldsNet
 			packet.Write(WorkshopService.CurrentSteamId);
 			packet.Write(record.WorkshopItemId);
 			packet.Send();
+		}
+
+		// Keep a local copy ready so this client can take over immediately if the host
+		// disappears. The server throttles snapshot requests.
+		if (!string.Equals(record.LocalHash, hash, StringComparison.OrdinalIgnoreCase))
+			ClientRequestSnapshot(worldId, publish: false);
+	}
+
+	private static void ClientHandleSession(BinaryReader reader)
+	{
+		if (Main.netMode != NetmodeID.MultiplayerClient)
+			return;
+
+		string worldId = reader.ReadString();
+		ulong hostSteamId = reader.ReadUInt64();
+		ulong lobbyId = reader.ReadUInt64();
+		int version = reader.ReadInt32();
+		string hash = reader.ReadString();
+		long snapshotTicks = reader.ReadInt64();
+		List<ulong> roster = ReadRoster(reader);
+
+		if (string.IsNullOrWhiteSpace(worldId))
+			return;
+
+		SharedWorldsSessionState.Set(new SharedWorldsLiveSession {
+			WorldId = worldId,
+			WorldName = SharedWorldsService.Instance.Registry.FindByWorldId(worldId)?.WorldName ?? "",
+			HostSteamId = hostSteamId,
+			LobbyId = lobbyId,
+			Version = version,
+			ContentHash = hash,
+			SnapshotUtc = snapshotTicks <= 0 ? default : new DateTime(snapshotTicks, DateTimeKind.Utc),
+			Roster = roster
+		});
+	}
+
+	private static void BroadcastSession()
+	{
+		try {
+			SharedWorldRecord? record = SharedWorldsService.Instance.CurrentRecord;
+			if (record == null || record.LastUpdatedUtc == default)
+				return;
+
+			List<ulong> roster = GetConnectedSteamIds();
+			ulong hostSteamId = WorkshopService.CurrentSteamId;
+			if (hostSteamId == 0)
+				hostSteamId = record.LastHostSteamId;
+
+			foreach (RemoteClient client in Netplay.Clients) {
+				if (!client.IsConnected())
+					continue;
+
+				ModPacket packet = NewPacket(MsgSession, 512 + roster.Count * 8);
+				packet.Write(record.WorldId);
+				packet.Write(hostSteamId);
+				packet.Write(GetLobbyId());
+				packet.Write(record.LocalVersion);
+				packet.Write(record.LocalHash ?? "");
+				packet.Write(record.LastUpdatedUtc.Ticks);
+				WriteRoster(packet, roster);
+				packet.Send(toClient: client.Id);
+			}
+		}
+		catch (Exception e) {
+			Log.Warn("Could not broadcast the Shared Worlds session roster.", e);
+		}
+	}
+
+	private static void WriteRoster(ModPacket packet, List<ulong> roster)
+	{
+		int count = Math.Min(roster.Count, 200);
+		packet.Write(count);
+		for (int i = 0; i < count; i++)
+			packet.Write(roster[i]);
+	}
+
+	private static List<ulong> ReadRoster(BinaryReader reader)
+	{
+		int count = reader.ReadInt32();
+		if (count < 0 || count > 200)
+			return new List<ulong>();
+
+		var roster = new List<ulong>(count);
+		for (int i = 0; i < count; i++) {
+			ulong steamId = reader.ReadUInt64();
+			if (steamId != 0 && !roster.Contains(steamId))
+				roster.Add(steamId);
+		}
+
+		return roster;
+	}
+
+	public static List<ulong> GetConnectedSteamIds()
+	{
+		var roster = new List<ulong>();
+		try {
+			for (int i = 0; i < 256; i++) {
+				if (!Netplay.Clients[i].IsConnected())
+					continue;
+
+				if (Netplay.Clients[i].Socket?.GetRemoteAddress() is SteamAddress address &&
+					address.SteamId.m_SteamID != 0 &&
+					!roster.Contains(address.SteamId.m_SteamID)) {
+					roster.Add(address.SteamId.m_SteamID);
+				}
+			}
+
+			ulong own = WorkshopService.CurrentSteamId;
+			if (own != 0 && !roster.Contains(own))
+				roster.Add(own);
+		}
+		catch (Exception e) {
+			Log.Warn("Could not build the Shared Worlds player roster.", e);
+		}
+
+		roster.Sort();
+		return roster;
+	}
+
+	private static ulong GetLobbyId()
+	{
+		try {
+			return SocialAPI.Network?.GetLobbyId() ?? 0;
+		}
+		catch {
+			return 0;
 		}
 	}
 

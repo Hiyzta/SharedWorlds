@@ -3,6 +3,7 @@ using Terraria;
 using Terraria.ID;
 using Terraria.IO;
 using Terraria.ModLoader;
+using SharedWorlds.Net;
 
 namespace SharedWorlds.Core;
 
@@ -19,6 +20,13 @@ public sealed class SharedWorldsService
 	private int _sessionStartVersion;
 	private bool _loadedAsMultiplayerClient;
 	private DateTime _pendingOpenToFriendsSince;
+
+	private readonly object _autoSaveLock = new();
+	private DateTime _lastAutoSaveRequestUtc = DateTime.UtcNow;
+	private DateTime _lastAutoSavePublishUtc = DateTime.MinValue;
+	private bool _autoSavePublishing;
+	private int _suppressAutoSave;
+	private DateTime _lastPresenceUtc = DateTime.MinValue;
 
 	public string CurrentWorldId => _currentWorldId;
 	public string LastStatus { get; private set; } = "";
@@ -172,6 +180,10 @@ public sealed class SharedWorldsService
 		_sessionStartHash = "";
 		_sessionStartVersion = 0;
 		_loadedAsMultiplayerClient = Main.netMode == NetmodeID.MultiplayerClient;
+		_lastAutoSaveRequestUtc = DateTime.UtcNow;
+		_lastAutoSavePublishUtc = DateTime.MinValue;
+		_lastPresenceUtc = DateTime.MinValue;
+		SharedWorldsPresence.Invalidate();
 
 		string? path = Main.worldPathName;
 		if (string.IsNullOrWhiteSpace(path))
@@ -200,7 +212,7 @@ public sealed class SharedWorldsService
 			_sessionStartHash = record.LocalHash;
 		}
 
-		LastStatus = $"Loaded shared world '{record.WorldName}' (local v{record.LocalVersion}).";
+		LastStatus = $"Loaded shared world '{record.WorldName}' (saved {FormatUtil.Timestamp(record.LastUpdatedUtc)}).";
 
 		if (Main.netMode == NetmodeID.SinglePlayer && Config.EnableWorkshopStorage && record.WorkshopStorageEnabled) {
 			_ = Task.Run(async () => {
@@ -231,6 +243,7 @@ public sealed class SharedWorldsService
 	public void OnWorldUnload()
 	{
 		bool loadedAsClient = _loadedAsMultiplayerClient;
+		bool unexpectedClientDisconnect = loadedAsClient && !Main.gameMenu;
 		string? worldPath = Main.worldPathName;
 		string? currentId = _currentWorldId;
 		string parentHash = _sessionStartHash;
@@ -240,12 +253,21 @@ public sealed class SharedWorldsService
 		_sessionStartHash = "";
 		_loadedAsMultiplayerClient = false;
 
-		if (string.IsNullOrWhiteSpace(currentId) || string.IsNullOrWhiteSpace(worldPath))
+		if (!loadedAsClient)
+			SharedWorldsPresence.ClearHosting();
+
+		if (string.IsNullOrWhiteSpace(currentId) || string.IsNullOrWhiteSpace(worldPath)) {
+			if (unexpectedClientDisconnect)
+				SharedWorldsMigration.Begin(currentId, worldPath);
 			return;
+		}
 
 		SharedWorldRecord? record = Registry.FindByWorldId(currentId);
-		if (record == null)
+		if (record == null) {
+			if (unexpectedClientDisconnect)
+				SharedWorldsMigration.Begin(currentId, worldPath);
 			return;
+		}
 
 		if (string.Equals(HostAndPlay.PendingOpenToFriendsWorldId, record.WorldId, StringComparison.OrdinalIgnoreCase)) {
 			HostAndPlay.PendingOpenToFriendsReady = true;
@@ -256,14 +278,26 @@ public sealed class SharedWorldsService
 		// A multiplayer client is not authoritative. Main.netMode may already be 0 by the
 		// time OnWorldUnload runs (Terraria resets it during disconnect), so use the mode
 		// captured at world load instead.
-		if (loadedAsClient)
+		if (loadedAsClient) {
+			// On an intentional Save & Exit, Terraria sets Main.gameMenu before calling
+			// OnWorldUnload. An unexpected disconnect leaves it false and is the signal
+			// that the host may be gone.
+			if (unexpectedClientDisconnect)
+				SharedWorldsMigration.Begin(record.WorldId, worldPath);
+			else
+				SharedWorldsSessionState.Clear();
 			return;
+		}
 
 		string twldPath = Path.ChangeExtension(worldPath, ".twld");
 		if (!File.Exists(worldPath) || !File.Exists(twldPath))
 			return;
 
-		PublishWorld(record, worldPath, twldPath, parentHash, startVersion);
+		// Autosave uploads have already advanced the local head. Prefer that head so the
+		// final exit snapshot is a child of the last live snapshot, not the session start.
+		string exitParent = record.LocalVersion > 0 ? record.LocalHash : parentHash;
+		int exitVersion = Math.Max(record.HighestKnownVersion, startVersion) + 1;
+		PublishWorld(record, worldPath, twldPath, exitParent, exitVersion - 1);
 	}
 
 	private void PublishWorld(SharedWorldRecord record, string worldPath, string twldPath, string parentHash, int startVersion)
@@ -303,7 +337,7 @@ public sealed class SharedWorldsService
 					if (Main.dedServ || Main.netMode == NetmodeID.Server) {
 						UploadResult retry = RetryPendingWithPump(record);
 						LastStatus = retry.Success
-							? $"Published pending snapshot v{record.LocalVersion} to Workshop."
+							? "Published the pending snapshot to Workshop."
 							: "Snapshot unchanged; pending Workshop upload is still waiting: " + retry.Message;
 					}
 					else {
@@ -325,7 +359,7 @@ public sealed class SharedWorldsService
 
 							Main.QueueMainThreadAction(() => {
 								LastStatus = retry.Success
-									? $"Published pending snapshot v{retryRecord.LocalVersion} to Workshop."
+									? "Published the pending snapshot to Workshop."
 									: "Snapshot unchanged; pending Workshop upload is still waiting: " + retry.Message;
 								Changed?.Invoke();
 							});
@@ -405,7 +439,7 @@ public sealed class SharedWorldsService
 					});
 				}
 				else {
-					LastStatus = $"Saved '{record.WorldName}' v{record.LocalVersion} locally. Workshop storage is disabled for this world.";
+					LastStatus = $"Saved '{record.WorldName}' locally. Workshop storage is disabled for this world.";
 					Log.Info(LastStatus);
 				}
 			}
@@ -556,13 +590,16 @@ public sealed class SharedWorldsService
 				ClearPending(latest);
 			}
 
-			LastStatus = $"Published '{latest.WorldName}' v{version} to Workshop.";
+			LastStatus = $"Published '{latest.WorldName}' snapshot saved {FormatUtil.Timestamp(latest.LastUpdatedUtc)} to Workshop.";
 			Log.Info(LastStatus);
 		}
-		else if (latest.LocalVersion > version && latest.PendingVersion == version) {
-			// A newer local snapshot superseded this upload; it is queued separately.
-			ClearPending(latest);
-			LastStatus = $"Skipped Workshop upload of older v{version}; local v{latest.LocalVersion} is newer.";
+		else if (latest.LocalVersion > version || latest.PendingVersion > version) {
+			// A newer local snapshot superseded this upload. Never overwrite the newer
+			// pending descriptor with this older result.
+			if (latest.PendingVersion == version)
+				ClearPending(latest);
+
+			LastStatus = "An older snapshot upload finished after a newer snapshot was queued; the newer pending snapshot was kept.";
 			Log.Info(LastStatus);
 		}
 		else {
@@ -684,11 +721,12 @@ public sealed class SharedWorldsService
 		};
 
 		string title = $"Shared World: {manifest.WorldName}";
+		string timestamp = FormatUtil.Timestamp(manifest.TimestampUtc);
 		string description =
 			"Storage item for the Shared Worlds tModLoader mod.\n\n" +
 			"This is NOT a mod. Do not subscribe to or install it as a mod.\n" +
 			$"World ID: {manifest.WorldId}\n" +
-			$"Latest version: {manifest.Version}\n" +
+			$"Latest snapshot: {timestamp}\n" +
 			$"Content hash: {manifest.ContentHash}\n" +
 			$"Last host: {WorkshopService.PersonaName(manifest.LastHostSteamId)}\n\n" +
 			"Only the owner of this Steam account can update this item. " +
@@ -700,7 +738,7 @@ public sealed class SharedWorldsService
 			metadata,
 			title,
 			description,
-			$"v{manifest.Version} {HashUtil.Short(manifest.ContentHash)}",
+			$"Snapshot {FormatUtil.Timestamp(manifest.TimestampUtc)}",
 			TimeSpan.FromSeconds(Math.Max(30, Config.UploadTimeoutSeconds)),
 			progress).ConfigureAwait(false);
 
@@ -966,7 +1004,7 @@ public sealed class SharedWorldsService
 			}
 			else {
 				report.Status = SyncStatus.LocalNewer;
-				report.Message = $"No newer published version was found; local v{record.LocalVersion} is the newest known. " + report.Message;
+				report.Message = "No newer published snapshot was found; this account has the newest saved copy. " + report.Message;
 			}
 
 			return report;
@@ -977,7 +1015,7 @@ public sealed class SharedWorldsService
 		if (relation == VersionRelation.Same) {
 			report.Status = SyncStatus.UpToDate;
 			report.BestRemote = bestRemote;
-			report.Message = $"Local snapshot is the newest known version (v{record.LocalVersion}). " + report.Message;
+			report.Message = $"This account's saved snapshot is the newest known copy. " + report.Message;
 			return report;
 		}
 
@@ -992,7 +1030,7 @@ public sealed class SharedWorldsService
 
 			report.Status = SyncStatus.LocalNewer;
 			report.BestRemote = bestRemote;
-			report.Message = $"Local snapshot v{record.LocalVersion} is newer than the published version. " + report.Message;
+			report.Message = "This account's saved snapshot is newer than the published snapshot. " + report.Message;
 			return report;
 		}
 
@@ -1012,7 +1050,7 @@ public sealed class SharedWorldsService
 			report.ForkHeads = heads.Count > 1 ? heads : new List<VersionRecord>();
 			report.Message = (heads.Count > 1
 				? "More than one published version exists. Open this world and sync to inspect and resolve it. "
-				: $"A newer snapshot is available on the Workshop (v{bestRemote.Version}). ") + report.Message;
+				: $"A newer snapshot is available on the Workshop (saved {FormatUtil.Timestamp(bestRemote.TimestampUtc)}). ") + report.Message;
 			return report;
 		}
 
@@ -1082,7 +1120,7 @@ public sealed class SharedWorldsService
 			MergeRemoteKnowledge(record, manifest, bestRemote);
 			report.Status = SyncStatus.LocalNewer;
 			report.BestRemote = bestRemote;
-			report.Message = $"Local snapshot v{record.LocalVersion} is newer than the published version. " + report.Message;
+			report.Message = "This account's saved snapshot is newer than the published snapshot. " + report.Message;
 			return report;
 		}
 
@@ -1134,7 +1172,7 @@ public sealed class SharedWorldsService
 
 		report.Status = SyncStatus.UpToDate;
 		report.BestRemote = downloadedRecord;
-		report.Message = $"Updated to v{manifest.Version} ({HashUtil.Short(manifest.ContentHash)}). " + installMessage;
+		report.Message = $"Updated to the snapshot saved {FormatUtil.Timestamp(manifest.TimestampUtc)}. " + installMessage;
 		return report;
 	}
 
@@ -1201,7 +1239,7 @@ public sealed class SharedWorldsService
 		Registry.Save();
 		Changed?.Invoke();
 
-		return (true, $"Installed v{manifest.Version} ({HashUtil.Short(manifest.ContentHash)}). The previous local branch was backed up. {message}");
+		return (true, $"Installed the snapshot saved {FormatUtil.Timestamp(manifest.TimestampUtc)}. The previous local branch was backed up. {message}");
 	}
 
 	public async Task<UploadResult> PublishNowAsync(SharedWorldRecord record, IProgress<(float, string)>? progress, CancellationToken token)
@@ -1343,11 +1381,248 @@ public sealed class SharedWorldsService
 		HostAndPlay.QueueOpenToFriends(worldId, out error);
 	}
 
+	public void SuppressAutoSaveForExplicitSave()
+	{
+		Interlocked.Increment(ref _suppressAutoSave);
+		_lastAutoSaveRequestUtc = DateTime.UtcNow;
+	}
+
+	public void ResumeAutoSaveAfterExplicitSave()
+	{
+		if (Interlocked.Decrement(ref _suppressAutoSave) < 0)
+			Interlocked.Exchange(ref _suppressAutoSave, 0);
+	}
+
+	/// <summary>
+	/// Called after any authoritative world save. While a shared world is live, this turns
+	/// the save into a Workshop update and a peer broadcast. The timer below only nudges a
+	/// save when Terraria's own autosave is disabled or the configured interval is longer.
+	/// </summary>
+	public void NotifyWorldSaved()
+	{
+		if (Main.netMode == NetmodeID.MultiplayerClient || Volatile.Read(ref _suppressAutoSave) > 0)
+			return;
+
+		if (Main.netMode != NetmodeID.Server && Main.gameMenu)
+			return;
+
+		if (string.IsNullOrWhiteSpace(_currentWorldId) || !Config.AutoUploadWhilePlaying)
+			return;
+
+		lock (_autoSaveLock) {
+			if (_autoSavePublishing)
+				return;
+
+			if ((DateTime.UtcNow - _lastAutoSavePublishUtc).TotalSeconds < 20)
+				return;
+
+			_autoSavePublishing = true;
+			_lastAutoSavePublishUtc = DateTime.UtcNow;
+			_lastAutoSaveRequestUtc = DateTime.UtcNow;
+		}
+
+		SharedWorldRecord? record = CurrentRecord;
+		if (record == null) {
+			lock (_autoSaveLock)
+				_autoSavePublishing = false;
+			return;
+		}
+
+		Log.Info($"Autosave detected for '{record.WorldName}'; publishing the live snapshot.");
+		_ = Task.Run(() => PublishAutoSave(record));
+	}
+
+	public void TickAutoSave()
+	{
+		if (Main.netMode == NetmodeID.MultiplayerClient || !Config.AutoUploadWhilePlaying)
+			return;
+
+		if (Main.netMode != NetmodeID.Server && Main.gameMenu)
+			return;
+
+		if (string.IsNullOrWhiteSpace(_currentWorldId))
+			return;
+
+		int minutes = Math.Clamp(Config.AutoUploadIntervalMinutes, 5, 60);
+		if ((DateTime.UtcNow - _lastAutoSaveRequestUtc).TotalMinutes < minutes + 0.5)
+			return;
+
+		if (CurrentRecord == null)
+			return;
+
+		_lastAutoSaveRequestUtc = DateTime.UtcNow;
+		Log.Info($"Shared Worlds autosave interval reached ({minutes} minute(s)); saving the world.");
+		try {
+			WorldGen.saveAndPlay();
+		}
+		catch (Exception e) {
+			Log.Warn("Could not trigger the Shared Worlds autosave.", e);
+		}
+	}
+
+	private void PublishAutoSave(SharedWorldRecord record)
+	{
+		try {
+			string? worldPath = Main.worldPathName;
+			if (string.IsNullOrWhiteSpace(worldPath))
+				return;
+
+			string twldPath = Path.ChangeExtension(worldPath, ".twld");
+			if (!File.Exists(worldPath) || !File.Exists(twldPath))
+				return;
+
+			ulong hostId = WorkshopService.CurrentSteamId;
+			if (hostId == 0)
+				hostId = record.LastHostSteamId;
+
+			SnapshotBuildResult built;
+			lock (_autoSaveLock) {
+				built = SnapshotService.Build(
+					record,
+					worldPath,
+					twldPath,
+					hostId,
+					GetCurrentMods(),
+					record.History,
+					record.LocalVersion > 0 ? record.LocalHash : "",
+					record.HighestKnownVersion + 1,
+					Config.MaxHistoryEntries);
+			}
+
+			if (!built.Success) {
+				Log.Warn("Autosave snapshot failed: " + built.Message);
+				return;
+			}
+
+			if (built.Unchanged) {
+				Log.Info("Autosave snapshot is unchanged; no Workshop update needed.");
+				if (record.PendingUpload && record.WorkshopStorageEnabled && WorkshopService.IsAvailable) {
+					_ = Task.Run(async () => {
+						try {
+							UploadResult retry = await RetryPendingAsync(record, null, CancellationToken.None).ConfigureAwait(false);
+							Main.QueueMainThreadAction(() => {
+								LastStatus = retry.Success
+									? "Published the pending snapshot to Workshop."
+									: "Pending snapshot is still waiting: " + retry.Message;
+								Changed?.Invoke();
+							});
+						}
+						catch (Exception e) {
+							Log.Warn("Could not retry the pending Workshop upload after an unchanged autosave.", e);
+						}
+					});
+				}
+				return;
+			}
+
+			record.LocalVersion = built.Version;
+			record.LocalHash = built.ContentHash;
+			record.LastParentHash = built.Manifest!.ParentHash;
+			record.LastHostSteamId = hostId;
+			record.LastUpdatedUtc = built.Manifest.TimestampUtc;
+			record.Mods = GetCurrentMods();
+			Registry.RecordVersion(record.WorldId, built.Manifest.AsVersionRecord, Config.MaxHistoryEntries);
+			record.History = Registry.FindByWorldId(record.WorldId)?.History ?? record.History;
+
+			bool upload = record.WorkshopStorageEnabled && WorkshopService.IsAvailable;
+			if (upload)
+				QueuePending(record, built.SnapshotDir, built.Version, built.ContentHash);
+
+			Registry.Update(record);
+			Registry.Save();
+			SnapshotService.PruneSnapshots(record.WorldId, Math.Max(3, Config.MaxLocalBackups / 2), built.SnapshotDir);
+			Changed?.Invoke();
+
+			if (Main.netMode == NetmodeID.Server) {
+				SharedWorldRecord broadcastRecord = Registry.FindByWorldId(record.WorldId) ?? record;
+				string snapshotDir = built.SnapshotDir;
+				SnapshotManifest manifest = built.Manifest;
+				Main.QueueMainThreadAction(() => {
+					try {
+						PeerTransferService.BeginBroadcast(
+							broadcastRecord,
+							snapshotDir,
+							manifest,
+							Enumerable.Range(0, 256).Where(i => Netplay.Clients[i].IsConnected() && Main.player[i].active));
+					}
+					catch (Exception e) {
+						Log.Warn("Could not broadcast the autosave snapshot.", e);
+					}
+				});
+			}
+
+			if (!upload) {
+				LastStatus = $"Saved '{record.WorldName}' locally at {FormatUtil.Timestamp(record.LastUpdatedUtc)}; Workshop storage is unavailable.";
+				Log.Info(LastStatus);
+				return;
+			}
+
+			string snapshot = built.SnapshotDir;
+			SnapshotManifest uploadedManifest = built.Manifest;
+			_ = Task.Run(async () => {
+				UploadResult result;
+				try {
+					result = await UploadSnapshotAsync(record, snapshot, uploadedManifest, null, CancellationToken.None).ConfigureAwait(false);
+				}
+				catch (Exception e) {
+					result = new UploadResult {
+						Success = false,
+						Pending = true,
+						ItemId = record.WorkshopItemId,
+						Message = "Autosave Workshop upload failed: " + e.Message,
+						Exception = e
+					};
+				}
+
+				Main.QueueMainThreadAction(() => CompleteUpload(record, snapshot, uploadedManifest.Version, uploadedManifest.ContentHash, result));
+			});
+		}
+		catch (Exception e) {
+			Log.Error("Autosave publish failed.", e);
+		}
+		finally {
+			lock (_autoSaveLock)
+				_autoSavePublishing = false;
+		}
+	}
+
+	private void TickServerPresence()
+	{
+		if ((DateTime.UtcNow - _lastPresenceUtc).TotalSeconds < 2)
+			return;
+
+		_lastPresenceUtc = DateTime.UtcNow;
+
+		SharedWorldRecord? record = CurrentRecord;
+		if (record == null) {
+			SharedWorldsPresence.ClearHosting();
+			return;
+		}
+
+		ulong lobbyId = 0;
+		try {
+			lobbyId = Terraria.Social.SocialAPI.Network?.GetLobbyId() ?? 0;
+		}
+		catch { }
+
+		if (lobbyId == 0)
+			return;
+
+		int players = Enumerable.Range(0, 256).Count(i => Netplay.Clients[i].IsConnected() && Main.player[i].active);
+		if (players == 0)
+			players = 1;
+
+		SharedWorldsPresence.PublishHosting(record, lobbyId, players, record.LocalHash, record.LocalVersion, record.LastUpdatedUtc);
+	}
+
 	/// <summary>Called from ModSystem.PostUpdateEverything on the client. Starts a queued Open to friends once the title screen is ready.</summary>
 	public void Tick()
 	{
 		WorkshopService.PumpCallbacks();
 		HostAndPlay.Tick();
+
+		if (Main.netMode == NetmodeID.Server)
+			TickServerPresence();
 
 		if (!HostAndPlay.PendingOpenToFriendsReady || Main.dedServ)
 			return;
@@ -1406,7 +1681,8 @@ public sealed class SharedWorldsService
 		var sb = new StringBuilder();
 		sb.AppendLine(record.WorldName);
 		sb.AppendLine($"World ID: {record.WorldId}");
-		sb.AppendLine($"Local snapshot: v{record.LocalVersion} {HashUtil.Short(record.LocalHash)}");
+		sb.AppendLine($"Latest saved snapshot: {FormatUtil.Timestamp(record.LastUpdatedUtc)}");
+		sb.AppendLine($"Snapshot id: {HashUtil.Short(record.LocalHash)}");
 		sb.AppendLine($"Last host: {WorkshopService.PersonaName(record.LastHostSteamId)}");
 		sb.AppendLine($"This account's item: {(record.WorkshopItemId == 0 ? "not created" : record.WorkshopItemId.ToString())}");
 		sb.AppendLine($"Pending upload: {(record.PendingUpload ? "yes" : "no")}{(record.PendingNeedsEula ? " (Steam Workshop EULA not accepted)" : "")}");

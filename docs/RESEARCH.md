@@ -134,7 +134,7 @@ Public Steamworks pages do not state a single universal Workshop item size limit
 - Preview images must be **< 1 MB** and require Steam Cloud quota.
 - Title/description/tags have their own character limits (`k_cchPublishedDocumentTitleMax`, etc.).
 - tModLoader mods are routinely uploaded at tens to hundreds of MB, so world snapshots (typically **2–15 MB**, compressed far less) are comfortably within normal limits.
-- `SubmitItemUpdate` has no public per-minute quota documented, but it is a network upload; we do **not** upload every autosave. We upload at most once per session/world save, and only if the content hash changed.
+- `SubmitItemUpdate` has no public per-minute quota documented, but it is a network upload; we do **not** create a new item per autosave. The live Shared Worlds timer updates the same owner item at most once per configured interval, and only if the content hash changed.
 - World snapshots are compressed and capped by us at **64 MB** (uncompressed) as a sanity limit; larger worlds are rejected with a clear error rather than risking a partial upload.
 
 ### 1.6 Workshop Legal Agreement / Steam Subscriber Agreement

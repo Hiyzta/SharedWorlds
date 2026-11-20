@@ -22,12 +22,12 @@
         or the original creator being online.
       </p>
       <div class="actions">
-        <a class="button primary" href="https://github.com/Hiyzta/SharedWorlds/releases/latest">Download 0.1.4</a>
+        <a class="button primary" href="https://github.com/Hiyzta/SharedWorlds/releases/latest">Download 0.2.0</a>
         <a class="button" href="#how">How it works</a>
         <a class="button" href="#install">Install</a>
         <a class="button" href="https://github.com/Hiyzta/SharedWorlds">GitHub</a>
       </div>
-      <p class="status">Status: 0.1.4 · early development · single-account Workshop flow tested</p>
+      <p class="status">Status: 0.2.0 · early development · live Play screen and autosave upload implemented</p>
     </div>
   </header>
 
@@ -58,7 +58,7 @@
         <article>
           <span class="step">02</span>
           <h3>Snapshot on exit</h3>
-          <p>When the authoritative host saves and exits, the mod writes a compressed snapshot: <code>world.wld</code>, <code>world.twld</code>, and a <code>manifest.json</code> with version, hash, parent hash, mods, and participant item IDs.</p>
+          <p>On every Shared Worlds autosave (default 10 minutes) and on save &amp; exit, the authoritative host writes a compressed snapshot: <code>world.wld</code>, <code>world.twld</code>, and a <code>manifest.json</code> with timestamp, hash, parent hash, mods, and participant item IDs.</p>
         </article>
         <article>
           <span class="step">03</span>
@@ -98,13 +98,14 @@ Bob ── sync / download ─────────────────�
     <section class="wrap">
       <h2>What you get</h2>
       <ul class="features">
-        <li><strong>Shared Worlds screen</strong> on the main menu: versions, last host, sync status, invites.</li>
-        <li><strong>Host</strong> from any account. The original creator is not special.</li>
+        <li><strong>Play Shared Worlds</strong>: a real multiplayer-menu row with a clean world list, live player count, timestamps and sync state.</li>
+        <li><strong>Join or host</strong> from any account. Join a live Host &amp; Play lobby, or host the latest verified snapshot.</li>
+        <li><strong>10-minute autosave uploads</strong> while live, always to the same per-account Workshop item.</li>
+        <li><strong>Host-left recovery</strong>: an ordered rehost offer, a handoff marker, and automatic follow-up join.</li>
         <li><strong>Open to friends</strong>: in-game panel → save → title → Host &amp; Play with friends-only lobby visibility.</li>
         <li><strong>Fork detection</strong> with an explicit choice for each remote head; the losing branch stays backed up.</li>
         <li><strong>Peer transfer</strong> in 16 KB verified chunks during a session.</li>
-        <li><strong>Responsive UI</strong> that fits small windows, with per-world version, host, item, participant, and pending/EULA status.</li>
-        <li><strong>Backups and retries</strong>: never swap an unverified file; keep pending uploads for later.</li>
+        <li><strong>Timestamp-first UI</strong> with host, item, participant, pending/EULA status and local backups.</li>
       </ul>
     </section>
 
@@ -189,6 +190,8 @@ dotnet build -c Release</code></pre>
         <li><strong>Propagation delay.</strong> A fresh upload can take a short while to become visible to other accounts. The mod retries and never installs unverified content.</li>
         <li><strong>Private is owner-only.</strong> A private item cannot be the shared storage primitive; friends-only is the correct setting.</li>
         <li><strong>No live conversion.</strong> “Open to friends” saves, returns to the title screen, and relaunches Host &amp; Play.</li>
+        <li><strong>Host recovery is a reconnect.</strong> Clients disconnect, one account rehosts, and the others follow the new Steam lobby. A crash before the last autosave can lose a few minutes.</li>
+        <li><strong>Live discovery is friends-only.</strong> Rich Presence is visible to Steam friends; a non-friend may miss the new lobby and fall back to the Workshop snapshot.</li>
         <li><strong>Peer transfer is best-effort.</strong> It does not trap the host until every client ACKs; the Workshop snapshot is the durability guarantee.</li>
         <li><strong>Policy risk.</strong> Non-mod items in the tModLoader Workshop are a grey area. They are clearly labelled, friends-only, and contain no executable content.</li>
       </ul>
@@ -198,7 +201,7 @@ dotnet build -c Release</code></pre>
       <h2>FAQ</h2>
       <details>
         <summary>Does the original creator have to be online?</summary>
-        <p>No. Each participant writes to their own Workshop item. The newest version can come from any account that hosted and saved.</p>
+        <p>No. Each participant writes to their own Workshop item. The newest snapshot can come from any account that hosted and saved.</p>
       </details>
       <details>
         <summary>Can two people host at the same time?</summary>

@@ -1,11 +1,15 @@
 Shared Worlds lets a group of friends share one Terraria world.
 
-Every participant gets their own private (friends-only) Steam Workshop item for the world. After each session the authoritative host uploads a compressed snapshot, and the next host downloads the newest snapshot before starting Host & Play. Steam friends, lobbies and peer-to-peer multiplayer still do the actual networking; this mod only decides where the newest world file lives.
+Every participant gets their own private (friends-only) Steam Workshop item for the world. While a world is live, the host updates that same item on the 10-minute autosave timer, and connected clients receive the snapshot for instant host recovery. Steam friends, lobbies and peer-to-peer multiplayer still do the actual networking; this mod only decides where the newest world file lives.
 
 Features:
-- Shared Worlds menu on the main menu
+- Real "Play Shared Worlds" row in the multiplayer menu
+- Clean Play screen with live host/player count, last-saved timestamps and sync state
+- Join an online shared world, or host the latest saved snapshot
+- Configurable 10-minute Shared Worlds autosave upload while hosting
+- Host-left prompt with a rehost election and automatic rejoin
 - Per-account Workshop storage (friends-only)
-- Version history, hash verification and local backups
+- Timestamped snapshot history, hash verification and local backups
 - Fork detection instead of silent overwrites
 - Peer-to-peer snapshot transfer during a session
 - "Open to friends" Host & Play launcher

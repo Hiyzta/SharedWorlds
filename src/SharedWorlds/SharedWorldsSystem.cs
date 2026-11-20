@@ -32,6 +32,7 @@ public sealed class SharedWorldsSystem : ModSystem
 	public override void PostUpdateEverything()
 	{
 		SharedWorldsService.Instance.Tick();
+		SharedWorldsService.Instance.TickAutoSave();
 		SharedWorldsNet.Tick();
 	}
 

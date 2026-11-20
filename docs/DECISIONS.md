@@ -115,7 +115,7 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 
 ## D-009 — Steam actions are isolated and user-visible
 
-**Decision:** Put all Steamworks calls behind `WorkshopService`/`SteamUgc` wrappers. Never call Steam APIs during background autosaves. Require an explicit "Enable Workshop storage" action per world (the registration flow), show the Workshop Legal Agreement requirement, and rate-limit uploads to once per changed session.
+**Decision:** Put all Steamworks calls behind `WorkshopService`/`SteamUgc` wrappers. Require an explicit "Enable Workshop storage" action per world (the registration flow), show the Workshop Legal Agreement requirement, and rate-limit automatic uploads to one changed snapshot per configured interval. Live autosave uploads are user-visible in the Play screen and reuse the same item.
 
 **Why:** tModLoader's Mod Upload Rules (including private/friends-only content) prohibit Steam API abuse and unexpected behaviour. The mod should look and behave like a game feature, not a background uploader.
 
@@ -301,8 +301,68 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 
 ## D-027 — Every remote head is an explicit fork choice
 
-**Decision:** When sync finds more than one head, the detail screen creates one confirmed “Use vN short-hash” button per remote head that has a Workshop item ID, instead of offering only `BestRemote`.
+**Decision:** When sync finds more than one head, the detail screen creates one confirmed “Use <timestamp>” button per remote head that has a Workshop item ID, instead of offering only `BestRemote`. The detail text keeps the short hash for diagnostics.
 
 **Why:** A version snapshot is not a merge. If Alice and Bob both branched from v3, choosing only the “highest” v4 could silently discard the other branch's changes. Showing each head with its hash, host, and item ID makes the decision explicit.
 
 **Consequence:** Up to three remote heads are shown directly; further heads remain listed in the text. Installing any choice backs up the current world first, and the other branches remain on their owners' items.
+
+---
+
+## D-028 — A real multiplayer-menu row uses a narrow `Main.DrawMenu` IL edit
+
+**Decision:** The mod adds **Play Shared Worlds** by IL-editing only the `menuMode == 12` branch of `Main.DrawMenu`: it moves the vanilla Back row down one slot, inserts the new label, increments the visible button count, and maps the extra visual selection back to the vanilla handlers. There is no full replacement of the menu.
+
+**Why:** tModLoader exposes `MenuLoader` for the title screen but no public API for the multiplayer button list. A normal UI overlay would not be a real list row and would not participate in the mouse/gamepad navigation path. A full `DrawMenu` replacement would be a much larger regression risk. The edit is deliberately anchored to the `menuMode == 12` check and the four-instruction `numButtons = 3 + offset` sequence, and it is wrapped in a load-time try/catch. The existing Shared Worlds button remains as a fallback.
+
+**Consequence:** A future tModLoader update that changes `Main.DrawMenu` can make the hook fail; the mod logs the failure and the fallback button still opens the setup screen. The Play screen can also be opened from the setup header.
+
+---
+
+## D-029 — STEAM Rich Presence is the live-session directory
+
+**Decision:** While a Host & Play server is live, the server publishes a small Rich Presence record: world ID, world name, lobby ID, version/hash, player count and snapshot timestamp. Clients read only worlds they already registered/imported. There is no friend-world discovery.
+
+**Why:** A backend would violate the project's no-server constraint. Steam lobbies are the actual networking layer, and Rich Presence is the only Steam-native way for a friend to see "this account is hosting this world" and obtain the current lobby ID. Values are short, non-secret metadata; workshop items still hold the world data.
+
+**Consequence:** Live discovery is friends-only and can lag while Steam updates presence. If a client is not Steam friends with the new host, it may not see the takeover. The Play screen treats presence as a hint and still verifies the world ID and lobby before joining.
+
+---
+
+## D-030 — Autosave updates the same item and broadcasts to clients
+
+**Decision:** A Shared Worlds-only timer (default 10 minutes, configurable) triggers a normal world save while authoritative (single-player or Host & Play server). A post-save hook builds one snapshot, updates the same per-account Workshop item, and broadcasts that snapshot to connected clients. It never creates a new Workshop item per autosave. Vanilla's own 10-minute autosave also feeds the same post-save hook.
+
+**Why:** "Save & exit only" loses the last hours of progress if the host crashes. Creating a new item per autosave would explode the Workshop and violate the one-item-per-account-per-world model. Reusing the existing item keeps the item ID stable and lets the latest timestamp be visible on the same page.
+
+**Consequence:** A failed autosave upload leaves the new snapshot pending and retryable. Exit uploads and background autosave uploads share the upload gate so an older background upload cannot overwrite a newer snapshot. The UI shows save timestamps rather than bumping version numbers at the player.
+
+---
+
+## D-031 — Host recovery is an ordered offer, not a silent auto-host
+
+**Decision:** When a client loses a host unexpectedly, it builds a candidate order from the last roster (SteamID ascending, old host excluded). One candidate at a time is offered "Rehost now"; the rest see who is being asked. A candidate that accepts writes a `sw_handoff` Rich Presence marker before starting Host & Play; the new server clears it when its lobby is live. If nobody accepts within the offer window, the client returns to the title screen, opens the Play screen and fetches the latest snapshot.
+
+**Why:** Terraria has no in-place host migration: clients disconnect and a new Host & Play server must load a world. Automatically starting a server on someone's PC without consent is too intrusive, and prompting everyone at once can start two hosts. The ordered offer plus handoff marker is a lightweight distributed-election substitute that needs no backend.
+
+**Consequence:** Recovery is coordinated, not seamless. Clients lose the connection, one account rehosts, and the others wait for the new lobby then join. If a candidate declines or has no usable snapshot, the next slot is offered after the timeout. A client not friends with the new host may miss the new lobby and fall back to the Workshop snapshot.
+
+---
+
+## D-032 — Timestamps are the player-facing identity; versions remain internal
+
+**Decision:** World rows, detail history, fork choices, Workshop descriptions and sync messages show local timestamps. Integer versions, hashes and parent links remain in `manifest.json`, metadata and diagnostics for ancestry/fork detection.
+
+**Why:** "v17" means nothing to a player and gets noisier as autosave increases the version count. A timestamp answers the real question: "how recent is this copy?" The hash still protects integrity and the parent graph still decides whether a fast-forward is safe.
+
+**Consequence:** Two snapshots can share a display minute but still be distinct internally. The detail view exposes the short hash for troubleshooting; normal decisions are made from time and status.
+
+---
+
+## D-033 — The Play screen joins live worlds and gates offline hosting on sync
+
+**Decision:** The primary action is **Join** when a matching live lobby is present, and **Host** only when the world is offline. Hosting runs the same metadata query and verified download as the setup screen before starting Host & Play. Forks/errors show **Resolve** and link to details. The screen lists only registered/imported worlds.
+
+**Why:** Joining a live host is faster and avoids a second server. Hosting a stale local copy is the main way to create a fork, so the offline Host path does the fast-forward check first. Showing unregistered friend worlds would imply a discovery service the mod deliberately does not have.
+
+**Consequence:** A world that is live but has a local sync error still offers Join; a world that is offline and forked refuses Host until the user resolves it. The Play screen is not a world browser.

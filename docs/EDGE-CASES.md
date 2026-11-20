@@ -12,7 +12,10 @@ Status legend:
 
 | Case | Status | Behavior |
 |---|---|---|
-| Crash/power loss before save/unload | Not fixable | No snapshot from that session. If Terraria autosaved, the next load records it as a local head; the next normal exit can publish it, possibly as a branch. |
+| Crash/power loss before an autosave | Not fixable | Progress since the last autosave/upload is lost. The last successful snapshot remains; the next normal save/exit publishes a new one. |
+| Crash/power loss before save/unload | Not fixable | No exit snapshot from that session. With live autosave enabled, the last 10-minute snapshot is still on the same Workshop item; otherwise the next load records the on-disk autosave as a local head. |
+| Autosave fires while an earlier upload is still running | Prevented | Uploads are serialized. The older upload is skipped if the local head has advanced, so the item cannot move backwards. |
+| Autosave save fails or Steam is offline | Mitigated | The snapshot is marked pending and retried. The world keeps playing; the UI shows the pending state. |
 | Host force-killed or server not shut down gracefully | Not fixable | No `OnWorldUnload`, no upload. The last published version remains; local files and backups are unaffected. |
 | Save with no content changes, pending upload exists | Prevented | The pending snapshot is retried through the non-blocking single-player path or the callback-pumping server path. |
 | Upload interrupted by quitting immediately | Prevented | Registry is marked pending **before** the upload. Retry on next save/unload or **Publish pending**. |
@@ -63,6 +66,14 @@ Status legend:
 | "Open to friends" transition | Mitigated | The single-player unload defers to the Host & Play server's shutdown upload. If the server fails to start, the save waits for the next normal save/unload. |
 | Private Host & Play API changes | Mitigated | Reflection is isolated; failure falls back to the normal Host & Play screen. |
 | Main menu hook availability | Prevented | Menu work uses `PostUpdateInput`; the button attaches to the active ModMenu UI and F9 is a fallback. |
+| Multiplayer-menu IL hook fails after a tModLoader update | Mitigated | The hook is anchored to `menuMode == 12` and wrapped in try/catch. The setup screen and its **Play** button remain available. |
+| A friend is hosting but their Rich Presence has not propagated yet | Mitigated | The Play screen refreshes presence every few seconds. The world appears offline until Steam updates; Refresh retries. |
+| Join a live lobby that has just closed | Mitigated | Steam reports the join failure; the Play screen stays usable and the world returns to offline/hostable. |
+| Host leaves while clients are connected | Mitigated | Clients detect the unexpected disconnect, show the rehost offer order, and wait for a new lobby. If nobody accepts, they return to the Play screen and fetch the latest snapshot. |
+| Elected rehost candidate declines or lacks a usable snapshot | Mitigated | The next candidate is offered after the current slot expires. No server is started without the candidate pressing **Rehost now**. |
+| Two clients try to rehost at once | Prevented | A `sw_handoff` Rich Presence marker is set before Host & Play starts and cleared by the new server. Other clients pause their own offers while the marker is visible. |
+| New host is not Steam friends with a waiting client | Not fixable | Rich Presence is friends-only. That client may miss the new lobby and fall back to the Workshop snapshot after the offer window. |
+| World exits during host recovery | Mitigated | Recovery does not modify the world until a candidate accepts. Declining/backing out fetches the latest verified snapshot into the Play screen. |
 
 ## Deliberate limits
 
@@ -70,3 +81,5 @@ Status legend:
 - No always-on backend. A player must be online to host.
 - No live single-player → multiplayer conversion. Host & Play starts a separate server.
 - Peer transfer is best-effort; Workshop upload is the durability guarantee. A host is not trapped behind a stuck client.
+- Host recovery is a disconnect/reconnect election, not an in-place handoff. Terraria has no live server migration.
+- Live advertisements are Steam Rich Presence; they are friends-only and not a backend directory.

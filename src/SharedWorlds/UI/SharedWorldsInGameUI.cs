@@ -139,6 +139,7 @@ public sealed class SharedWorldsInGamePanel : UIState
 			Width = StyleDimension.FromPixels(556),
 			Height = StyleDimension.FromPixels(118),
 			IsWrapped = true,
+			TextOriginX = 0f,
 			TextColor = new Color(185, 220, 232)
 		};
 		panel.Append(_body);
@@ -157,6 +158,7 @@ public sealed class SharedWorldsInGamePanel : UIState
 			Top = StyleDimension.FromPixels(262),
 			Width = StyleDimension.FromPixels(556),
 			IsWrapped = true,
+			TextOriginX = 0f,
 			TextColor = new Color(132, 168, 182)
 		});
 
@@ -176,7 +178,7 @@ public sealed class SharedWorldsInGamePanel : UIState
 
 		_body.SetText(
 			$"{record.WorldName}\n" +
-			$"Local snapshot: {(record.LocalVersion == 0 ? "none" : $"v{record.LocalVersion} {HashUtil.Short(record.LocalHash)}")}\n" +
+			$"Latest saved snapshot: {(record.LocalVersion == 0 ? "none yet" : FormatUtil.Timestamp(record.LastUpdatedUtc))}\n" +
 			$"Last host: {WorkshopService.PersonaName(record.LastHostSteamId)}\n" +
 			$"This account's item: {(record.WorkshopItemId == 0 ? "not created yet" : record.WorkshopItemId.ToString())}\n" +
 			$"Workshop: {(record.PendingNeedsEula ? "EULA needed" : record.PendingUpload ? "upload pending" : "no pending upload")}");

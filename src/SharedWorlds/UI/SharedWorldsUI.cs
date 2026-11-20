@@ -23,10 +23,60 @@ public static class SharedWorldsUI
 		Main.menuMode = 888;
 	}
 
+	/// <summary>Opens the clean Play screen used by the real multiplayer-menu row.</summary>
+	public static void OpenPlay(int returnMenuMode = 12, string? status = null, string? focusWorldId = null)
+	{
+		if (Main.dedServ)
+			return;
+
+		SoundEngine.PlaySound(SoundID.MenuOpen);
+		Main.MenuUI.SetState(new SharedWorldsPlayUIState(returnMenuMode, status, focusWorldId));
+		Main.menuMode = 888;
+	}
+
 	public static void Close()
 	{
+		CloseTo(0);
+	}
+
+	public static void CloseTo(int menuMode)
+	{
 		Main.MenuUI.SetState(null);
-		Main.menuMode = 0;
+		Main.menuMode = menuMode;
+	}
+
+	public static bool JoinLobby(LiveWorldSession live, out string error)
+	{
+		error = "";
+		if (Main.dedServ) {
+			error = "Multiplayer is not available on a dedicated server.";
+			return false;
+		}
+
+		if (live == null || live.LobbyId == 0) {
+			error = "That shared world is no longer online.";
+			return false;
+		}
+
+		if (Terraria.Social.SocialAPI.Network is not Terraria.Social.Steam.NetClientSocialModule client) {
+			error = "Steam multiplayer is not available. Start tModLoader through Steam.";
+			return false;
+		}
+
+		try {
+			Main.MenuUI.SetState(null);
+			Main.menuMode = 0;
+			Main.menuMultiplayer = true;
+			Main.menuServer = false;
+			client.ConnectToLobby(live.LobbyId);
+			Log.Info($"Joining live shared world '{live.WorldName}' via lobby {live.LobbyId}.");
+			return true;
+		}
+		catch (Exception e) {
+			Log.Error("Could not join the shared-world lobby.", e);
+			error = "Could not join the live world: " + e.Message;
+			return false;
+		}
 	}
 }
 
@@ -38,7 +88,15 @@ public sealed class SharedWorldsUIState : UIState
 	private bool _busy;
 	private Task<SyncReport>? _task;
 	private string _hostAfterSync = "";
+	private readonly Action? _onBack;
+	private readonly Action? _onPlay;
 	public SyncReport? LastSyncReport { get; private set; }
+
+	public SharedWorldsUIState(Action? onBack = null, Action? onPlay = null)
+	{
+		_onBack = onBack;
+		_onPlay = onPlay;
+	}
 
 	public override void OnInitialize()
 	{
@@ -75,6 +133,13 @@ public sealed class SharedWorldsUIState : UIState
 			TextColor = new Color(120, 200, 214)
 		};
 		panel.Append(subtitle);
+
+		panel.Append(MakeButton("Play", panelWidth - 122, 20, 96, () => {
+			if (_onPlay != null)
+				_onPlay();
+			else
+				SharedWorldsUI.OpenPlay(0);
+		}));
 
 		var listPanel = new UIPanel {
 			Left = StyleDimension.FromPixels(20),
@@ -121,6 +186,7 @@ public sealed class SharedWorldsUIState : UIState
 			Width = StyleDimension.FromPixels(panelWidth - 60),
 			Height = StyleDimension.FromPixels(38),
 			IsWrapped = true,
+			TextOriginX = 0f,
 			TextColor = new Color(190, 224, 234)
 		};
 		statusPanel.Append(_status);
@@ -129,7 +195,12 @@ public sealed class SharedWorldsUIState : UIState
 		panel.Append(MakeButton("Refresh", 24, buttonTop, 110, () => RefreshList()));
 		panel.Append(MakeButton("Register world", 144, buttonTop, 150, OpenPicker));
 		panel.Append(MakeButton("Import invite", 304, buttonTop, 140, OpenImport));
-		panel.Append(MakeButton("Back", panelWidth - 104, buttonTop, 80, SharedWorldsUI.Close));
+		panel.Append(MakeButton("Back", panelWidth - 104, buttonTop, 80, () => {
+			if (_onBack != null)
+				_onBack();
+			else
+				SharedWorldsUI.Close();
+		}));
 	}
 
 	public override void OnActivate()
@@ -229,6 +300,14 @@ public sealed class SharedWorldsUIState : UIState
 	{
 		if (_busy)
 			return;
+
+		if (hostAfter) {
+			LiveWorldSession? live = SharedWorldsLiveService.FindLive(record);
+			if (live != null && live.HostSteamId != WorkshopService.CurrentSteamId) {
+				_status.SetText($"{WorkshopService.PersonaName(live.HostSteamId)} is already hosting this world. Use Play Shared Worlds to join instead.");
+				return;
+			}
+		}
 
 		_busy = true;
 		_hostAfterSync = hostAfter ? record.WorldId : "";
@@ -354,18 +433,20 @@ public sealed class SharedWorldEntryElement : UIPanel
 		var name = new UIText(record.WorldName, 0.92f) {
 			Left = StyleDimension.FromPixels(14),
 			Top = StyleDimension.FromPixels(8),
-			Width = StyleDimension.FromPixelsAndPercent(-330, 1f)
+			Width = StyleDimension.FromPixelsAndPercent(-330, 1f),
+			TextOriginX = 0f
 		};
 		Append(name);
 
 		string host = WorkshopService.PersonaName(record.LastHostSteamId);
 		string version = record.LocalVersion == 0
-			? "no local snapshot"
-			: $"v{record.LocalVersion} · {HashUtil.Short(record.LocalHash)}";
+			? "no local snapshot yet"
+			: $"{FormatUtil.Relative(record.LastUpdatedUtc)} · {FormatUtil.Timestamp(record.LastUpdatedUtc)}";
 		var versionText = new UIText($"{version}  ·  last host: {host}", 0.66f) {
 			Left = StyleDimension.FromPixels(14),
 			Top = StyleDimension.FromPixels(36),
 			Width = StyleDimension.FromPixelsAndPercent(-330, 1f),
+			TextOriginX = 0f,
 			TextColor = new Color(160, 202, 216)
 		};
 		Append(versionText);
@@ -378,6 +459,7 @@ public sealed class SharedWorldEntryElement : UIPanel
 			Left = StyleDimension.FromPixels(14),
 			Top = StyleDimension.FromPixels(57),
 			Width = StyleDimension.FromPixelsAndPercent(-330, 1f),
+			TextOriginX = 0f,
 			TextColor = record.PendingUpload ? new Color(240, 198, 118) : new Color(128, 170, 184)
 		};
 		Append(itemText);
@@ -385,11 +467,12 @@ public sealed class SharedWorldEntryElement : UIPanel
 		var hint = new UIText(
 			record.Participants.Count == 0
 				? "Only this account so far"
-				: $"{record.Participants.Count} participant account(s)  ·  {record.History.Count} known version(s)",
+				: $"{record.Participants.Count} participant account(s)  ·  {record.History.Count} saved snapshot(s)",
 			0.58f) {
 			Left = StyleDimension.FromPixels(14),
 			Top = StyleDimension.FromPixels(78),
 			Width = StyleDimension.FromPixelsAndPercent(-330, 1f),
+			TextOriginX = 0f,
 			TextColor = new Color(110, 145, 160)
 		};
 		Append(hint);
@@ -572,6 +655,7 @@ public sealed class SharedWorldDetailUIState : UIState
 		_text.Top = StyleDimension.FromPixels(88);
 		_text.Width = StyleDimension.FromPixels(panelWidth - 48);
 		_text.Height = StyleDimension.FromPixels(panelHeight - 250);
+		_text.TextOriginX = 0f;
 		_text.TextColor = new Color(185, 215, 230);
 		_text.SetText(SharedWorldsService.Instance.DescribeRecord(_record) + DescribeFork() + DescribeHistory());
 		panel.Append(_text);
@@ -630,25 +714,25 @@ public sealed class SharedWorldDetailUIState : UIState
 				ulong itemId = ulong.Parse(head.SourceItemId!);
 				float left = 24 + i * 208;
 				panel.Append(SharedWorldsUIState.MakeButton(
-					$"Use v{head.Version} {HashUtil.Short(head.Hash, 6)}",
+					$"Use {FormatUtil.ShortTimestamp(head.TimestampUtc)}",
 					left, secondRow, 196,
-					() => ResolveWithRemote(itemId, head.Version)));
+					() => ResolveWithRemote(itemId)));
 			}
 		}
 	}
 
 	private ulong _pendingRemoteItemId;
 
-	private void ResolveWithRemote(ulong itemId, int version)
+	private void ResolveWithRemote(ulong itemId)
 	{
 		if (_pendingRemoteItemId != itemId) {
 			_pendingRemoteItemId = itemId;
-			_parent.ShowStatus($"Click the same 'Use v{version}' button again to confirm. The local branch will be backed up first.");
+			_parent.ShowStatus("Click the same timestamp button again to confirm. The local branch will be backed up first.");
 			return;
 		}
 
 		_pendingRemoteItemId = 0;
-		_parent.ShowStatus($"Installing remote v{version}...");
+		_parent.ShowStatus("Installing the selected snapshot...");
 		_ = Task.Run(async () => {
 			(bool success, string message) = await SharedWorldsService.Instance.InstallRemoteSnapshotAsync(_record, itemId, null, CancellationToken.None);
 			Main.QueueMainThreadAction(() => {
@@ -665,9 +749,9 @@ public sealed class SharedWorldDetailUIState : UIState
 		if (report?.Status != SyncStatus.Fork)
 			return "";
 
-		var sb = new System.Text.StringBuilder("\n\nFORK: more than one version exists.\n");
+		var sb = new System.Text.StringBuilder("\n\nFORK: more than one saved branch exists.\n");
 		foreach (VersionRecord head in report.ForkHeads) {
-			sb.AppendLine($"  v{head.Version}  {HashUtil.Short(head.Hash)}  host {WorkshopService.PersonaName(head.HostSteamId)}  item {head.SourceItemId ?? "?"}");
+			sb.AppendLine($"  {FormatUtil.Timestamp(head.TimestampUtc)}  ·  host {WorkshopService.PersonaName(head.HostSteamId)}  ·  item {head.SourceItemId ?? "?"}");
 		}
 
 		sb.AppendLine("Nothing has been overwritten. Use one of the version buttons below to install that branch (it will be backed up), or Back to keep the local version.");
@@ -679,9 +763,9 @@ public sealed class SharedWorldDetailUIState : UIState
 		if (_record.History.Count == 0)
 			return "\n\nNo version history recorded yet.";
 
-		var sb = new System.Text.StringBuilder("\n\nVersion history (newest first):\n");
-		foreach (VersionRecord version in _record.History.OrderByDescending(v => v.Version).Take(8)) {
-			sb.AppendLine($"  v{version.Version}  {HashUtil.Short(version.Hash)}  parent {HashUtil.Short(version.ParentHash)}  host {WorkshopService.PersonaName(version.HostSteamId)}  {version.TimestampUtc:yyyy-MM-dd HH:mm} UTC");
+		var sb = new System.Text.StringBuilder("\n\nSaved snapshots (newest first):\n");
+		foreach (VersionRecord version in _record.History.OrderByDescending(v => v.TimestampUtc).Take(8)) {
+			sb.AppendLine($"  {FormatUtil.Timestamp(version.TimestampUtc)}  ·  host {WorkshopService.PersonaName(version.HostSteamId)}  ·  {HashUtil.Short(version.Hash)}");
 		}
 
 		if (_record.History.Count > 8)

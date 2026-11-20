@@ -23,6 +23,9 @@ public static class HostAndPlay
 	/// <summary>Set when the player must pick a character before Host &amp; Play can start.</summary>
 	public static string PendingHostWorldId { get; private set; } = "";
 
+	public static bool IsWaitingForCharacter(string worldId)
+		=> !string.IsNullOrEmpty(worldId) && string.Equals(PendingHostWorldId, worldId, StringComparison.OrdinalIgnoreCase);
+
 	public static bool QueueOpenToFriends(string worldId, out string error)
 	{
 		error = "";
@@ -53,6 +56,7 @@ public static class HostAndPlay
 		PendingOpenToFriendsWorldId = "";
 		PendingOpenToFriendsReady = false;
 		PendingHostWorldId = "";
+		SharedWorldsPresence.ClearHandoff();
 	}
 
 	/// <summary>Continues a Host request after character selection, or clears it if the player backs out.</summary>
@@ -63,6 +67,7 @@ public static class HostAndPlay
 
 		if (Main.menuMode == 0) {
 			PendingHostWorldId = "";
+			SharedWorldsPresence.ClearHandoff();
 			return;
 		}
 

@@ -2,6 +2,30 @@
 
 All notable changes to Shared Worlds are documented here. The format follows Keep a Changelog; versions use SemVer.
 
+## [0.2.0] - 2026-11-20
+
+### Added
+
+- A real **Play Shared Worlds** row in Terraria's multiplayer menu, injected through a narrow `Main.DrawMenu` IL hook with the existing main-menu button as a fallback.
+- A clean Play screen: live/offline state, host name, online player count, last-saved timestamp, sync state, errors and a per-world Host/Join/Resolve action.
+- Live host advertisement through Steam Rich Presence (`world`, `lobby`, `hash`, `version`, `players`, timestamp). Friends can join an active Host & Play lobby directly.
+- Host-left recovery. Clients detect an unexpected disconnect, wait through a deterministic SteamID-ordered rehost offer, and show who is taking over. If nobody accepts, the client returns to the title screen, opens the Play screen and fetches the latest snapshot.
+- Configurable Shared Worlds autosave upload (default 10 minutes) while playing or hosting. Every autosave updates the same per-account Workshop item and broadcasts the snapshot to connected clients.
+- A Steam Rich Presence handoff marker so two clients cannot start competing hosts during recovery.
+- Client snapshot requests on join, keeping a local recovery copy ready.
+- Timestamp-first UI for world rows, details, history and fork choices. Internal version numbers remain for ancestry only.
+
+### Changed
+
+- The Workshop item description and change note now show the snapshot timestamp instead of a version number.
+- The Play screen is opened from the multiplayer menu; the existing Shared Worlds screen is now the setup/manage surface.
+
+### Fixed
+
+- Menu-row selection is mapped back to the vanilla handlers so the added row does not steal the Back action.
+- `Recalculate`/UI text alignment on custom screens now uses explicit left alignment for left-hand labels.
+- Autosave uploads are serialized with exit uploads so a newer local snapshot cannot be overwritten by an older background upload.
+
 ## [0.1.4] - 2026-11-20
 
 ### Fixed

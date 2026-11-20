@@ -6,6 +6,7 @@ Configs: {
 			Workshop: Workshop Header
 			LocalSafety: Local Safety Header
 			Interface: Interface Header
+			LiveSession: Live World
 		}
 
 		EnableWorkshopStorage: {
@@ -56,6 +57,21 @@ Configs: {
 		VerboseLogging: {
 			Label: Verbose Logging
 			Tooltip: ""
+		}
+
+		AutoUploadWhilePlaying: {
+			Label: Upload While Playing
+			Tooltip: While a shared world is live, update your own Workshop item from the Shared Worlds autosave timer and Terraria's normal saves.
+		}
+
+		AutoUploadIntervalMinutes: {
+			Label: Autosave Upload Interval (minutes)
+			Tooltip: Minutes between Shared Worlds autosaves while you are playing or hosting. Default: 10. Terraria's own autosave also updates the item when it fires.
+		}
+
+		EnableHostMigration: {
+			Label: Host-Left Recovery
+			Tooltip: If the host unexpectedly disconnects, offer the group an ordered rehost prompt and follow the new lobby when it appears.
 		}
 	}
 }

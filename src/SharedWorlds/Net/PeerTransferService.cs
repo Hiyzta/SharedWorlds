@@ -165,7 +165,13 @@ public static class PeerTransferService
 	private static void PublishAndBroadcast(SharedWorldRecord record, bool publish)
 	{
 		try {
-			WorldFile.SaveWorld();
+			SharedWorldsService.Instance.SuppressAutoSaveForExplicitSave();
+			try {
+				WorldFile.SaveWorld();
+			}
+			finally {
+				SharedWorldsService.Instance.ResumeAutoSaveAfterExplicitSave();
+			}
 
 			string worldPath = Main.worldPathName;
 			string twldPath = Path.ChangeExtension(worldPath, ".twld");
@@ -221,7 +227,7 @@ public static class PeerTransferService
 			SharedWorldsService.Instance.Registry.Save();
 
 			BeginBroadcast(record, built.SnapshotDir, built.Manifest, Enumerable.Range(0, 256).Where(i => Netplay.Clients[i].IsConnected() && Main.player[i].active));
-			Main.NewText($"Snapshot v{built.Version} is being sent to connected players.", 180, 220, 255);
+			Main.NewText($"Snapshot saved {FormatUtil.Timestamp(built.Manifest.TimestampUtc)} is being sent to connected players.", 180, 220, 255);
 
 			if (publish) {
 				string snapshotDir = built.SnapshotDir;
@@ -241,7 +247,7 @@ public static class PeerTransferService
 								SharedWorldsService.Instance.Registry.Save();
 							}
 
-							Main.QueueMainThreadAction(() => Main.NewText($"Published shared world v{manifest.Version} to Steam Workshop.", 160, 255, 180));
+							Main.QueueMainThreadAction(() => Main.NewText($"Published the shared world snapshot saved {FormatUtil.Timestamp(manifest.TimestampUtc)} to Steam Workshop.", 160, 255, 180));
 						}
 						else {
 							record.PendingNeedsEula = result.NeedsEula;
@@ -464,8 +470,8 @@ public static class PeerTransferService
 			SharedWorldsService.Instance.Registry.Update(record);
 			SharedWorldsService.Instance.Registry.Save();
 
-			ClientSideNotify($"Received shared world '{record.WorldName}' v{manifest.Version}.");
-			SharedWorldsNet.ClientSendAck(id, true, $"v{manifest.Version} installed");
+			ClientSideNotify($"Received a live snapshot of '{record.WorldName}' saved {FormatUtil.Timestamp(manifest.TimestampUtc)}.");
+			SharedWorldsNet.ClientSendAck(id, true, $"snapshot saved {FormatUtil.Timestamp(manifest.TimestampUtc)} installed");
 		}
 		catch (Exception e) {
 			Log.Error("Could not install received snapshot.", e);
