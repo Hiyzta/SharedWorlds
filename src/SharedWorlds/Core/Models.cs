@@ -40,6 +40,9 @@ public sealed class SharedWorldRecord
 	public int PendingVersion { get; set; }
 	public string? PendingHash { get; set; }
 
+	/// <summary>Steam uploaded the item but is waiting for the one-time Workshop Legal Agreement.</summary>
+	public bool PendingNeedsEula { get; set; }
+
 	[JsonIgnore]
 	public bool HasLocalFile => !string.IsNullOrWhiteSpace(WorldFileName);
 

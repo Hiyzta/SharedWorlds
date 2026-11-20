@@ -1,4 +1,5 @@
 using System.IO;
+using Terraria;
 using Terraria.ModLoader;
 using Terraria.ModLoader.IO;
 using SharedWorlds.Core;
@@ -32,6 +33,14 @@ public sealed class SharedWorldsSystem : ModSystem
 	{
 		SharedWorldsService.Instance.Tick();
 		SharedWorldsNet.Tick();
+	}
+
+	public override void PostUpdateInput()
+	{
+		// Main.Update returns before PostUpdateEverything on the title screen, so menu-only
+		// work (queued Open to friends and Host & Play continuation) needs this hook.
+		if (Main.gameMenu)
+			SharedWorldsService.Instance.Tick();
 	}
 
 	public override void SaveWorldData(TagCompound tag)

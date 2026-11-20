@@ -67,16 +67,11 @@ public sealed class SharedWorldsInGameUI : ModSystem
 
 	public override void PostUpdateInput()
 	{
-		if (Main.dedServ || _keybind == null || Main.drawingPlayerChat)
+		if (Main.dedServ || Main.gameMenu || _keybind == null || Main.drawingPlayerChat)
 			return;
 
 		if (!_keybind.JustPressed)
 			return;
-
-		if (Main.gameMenu) {
-			SharedWorldsUI.Open();
-			return;
-		}
 
 		if (_ui.CurrentState == null) {
 			_panel.Refresh();

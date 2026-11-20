@@ -4,7 +4,7 @@ A tModLoader mod that lets a group of friends share **one** Terraria world acros
 
 Steam already handles multiplayer (Host & Play, Steam friends, lobbies, P2P). Shared Worlds solves the part Steam does not: **where the newest world file lives** and **how the next host gets it**.
 
-> Status: **0.1.0, early development.** The core snapshot, versioning, fork-detection and server-side save/upload paths are implemented and smoke-tested. The two-account Steam Workshop flow and the graphical UI still need manual testing with two logged-in Steam accounts. See [Testing](#testing).
+> Status: **0.1.1, early development.** The snapshot, versioning, fork-detection, main-menu, in-game panel, Host & Play, and single-account Workshop create/upload/query/download paths are implemented and tested. Friends-only access from a **second** Steam account and the Steam overlay EULA flow still need a two-account manual check. See [Testing](#testing).
 
 ---
 
@@ -178,7 +178,7 @@ The in-game **F9** panel has **Sync & publish**. It asks the server to save the 
 - **Workshop propagation delay.** A just-uploaded version may take a short time to appear in other accounts' queries. The mod retries and reports "uploaded, waiting for Steam". It never swaps in unverified content.
 - **A host must be online to host.** The mod removes the need for the *original creator* or an always-on server; it cannot remove the need for *some* player to be online during a session.
 - **Use the Shared Worlds Host button.** The normal Host & Play button bypasses the pre-host Workshop check. A load-time warning and fork detection still protect you, but the intended path checks first.
-- **No Steam Cloud worlds** in 0.1.0. Move the world to local storage first.
+- **No Steam Cloud worlds** in 0.1.x. Move the world to local storage first.
 - **No live single-player → multiplayer conversion.** Host & Play is a separate process.
 - **No hard "wait for everyone" quit gate.** Peer transfer is best-effort; the Workshop upload is the durability guarantee.
 - **Workshop items are policy-sensitive.** They live in the tModLoader Workshop but are not mods. They are friends-only, clearly labelled, and contain no executable content. If Valve/tModLoader removes them, the mod falls back to peer transfer and local copied snapshots.
@@ -196,7 +196,7 @@ Start tModLoader through Steam, not by running the executable directly. GOG/offl
 The owner's item is friends-only. Add each other on Steam. The error names the account.
 
 **Upload says pending**
-The snapshot is safe locally. Open Shared Worlds → Info → **Publish pending**, or wait until the next save. Check the tModLoader log for the Steam error. If Steam needs the Workshop EULA, accept it and retry.
+The snapshot is safe locally. Open Shared Worlds → Info → **Publish pending**, or wait until the next save. Check the tModLoader log for the Steam error. If Steam needs the Workshop Legal Agreement, the world shows **EULA needed**; open **Info** and use **Accept Workshop EULA**, accept the overlay prompt once, then **Publish pending**. The server process cannot show the overlay, so accept it on the host client or in the Steam client.
 
 **"Downloaded snapshot does not match the queried version metadata"**
 Steam has not finished propagating the update, or an item was changed mid-query. Retry in a minute. The mod refuses to install mismatched content.
@@ -236,14 +236,16 @@ Server smoke test (Linux):
 ```bash
 # Use a throwaway save directory and a copy of a world.
 dotnet tModLoader.dll -server \
-  -tmlsavedirectory /tmp/sw-test \
+  -savedirectory /tmp/sw-test \
   -modpath /tmp/sw-test/Mods \
   -world /tmp/sw-test/Worlds/Test.wld
 ```
 
 The log should show the mod loading, a snapshot being built after Save/Exit, and no exceptions.
 
-**Still needs two real Steam accounts:** friends-only create/query/subscribe/download, UI walkthrough, Host & Play from the menu, and peer transfer. This is the release gate.
+**Single-account verification (2026-11-20):** registered a world, started Host & Play, saved on server shutdown, created Workshop item `3842489661`, published v1/v2 as friends-only, queried it back, downloaded it into a fresh save, verified the hashes, and fast-forwarded to v2. The main-menu button, world picker, sync, detail, in-game panel, and Host & Play launch were exercised through the real UI.
+
+**Still needs a second Steam account:** friends-only visibility/query/download, the Steam overlay EULA prompt, and peer transfer to a non-host client. Those are the remaining release gates.
 
 ---
 

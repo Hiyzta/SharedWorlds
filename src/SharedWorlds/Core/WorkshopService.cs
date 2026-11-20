@@ -18,6 +18,24 @@ public static class WorkshopService
 	public static bool IsSteamPresent => SteamedWraps.SteamClient;
 	public static bool IsClient => SteamedWraps.SteamClient;
 
+	/// <summary>
+	/// Pumps Steam callbacks. tModLoader does this on the main thread during normal updates,
+	/// but uploads started during world unload or server shutdown need a helper because the
+	/// main thread is blocked waiting for the result.
+	/// </summary>
+	public static void PumpCallbacks()
+	{
+		if (!IsClient)
+			return;
+
+		try {
+			SteamAPI.RunCallbacks();
+		}
+		catch (Exception e) {
+			Log.Warn("Steam callback pump failed.", e);
+		}
+	}
+
 	public static ulong CurrentSteamId
 	{
 		get {

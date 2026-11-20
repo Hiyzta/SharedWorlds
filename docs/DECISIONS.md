@@ -256,3 +256,33 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 **Why:** Without merging, the server's shutdown write could drop a client-side participant update, or a client write could hide the server's new snapshot. The lock prevents torn read-modify-write cycles; the merge keeps both sides' data.
 
 **Consequence:** The merge is intentionally conservative: it never lowers a local version, unions history by hash, and prefers nonzero participant item IDs. It is not a distributed consensus protocol; the group's single-writer-at-a-time rule is still what prevents forks.
+
+---
+
+## D-023 — Menu-only work uses `PostUpdateInput`, not `PostUpdateEverything`
+
+**Decision:** Attach the main-menu button, watch for the menu F9 hotkey, and run queued Open-to-friends/Host & Play continuation from `ModSystem.PostUpdateInput`. `SharedWorldsService.Tick()` is also called there when `Main.gameMenu` is true; in-game updates remain in `PostUpdateEverything`.
+
+**Why:** tModLoader 2026.09.3.1's `Main.Update` returns early on the title screen (`gameMenu && netMode != 2`) before `SystemLoader.PostUpdateEverything()`. Menu code placed there never runs. `PostUpdateInput` runs in both menus and gameplay. Reading a `ModKeybind` before input triggers are initialized (while mods are loading at the menu) throws `KeyNotFoundException`, so the in-game keybind is now read only when `!Main.gameMenu`.
+
+**Consequence:** Any future menu-only feature must use a menu hook; `PostUpdateEverything` is gameplay-only for this purpose. The main menu button is attached to `MenuLoader.CurrentMenu.UserInterface`, which is drawn by tModLoader over the title screen, and F9-at-menu is a direct `Main.keyState` edge check.
+
+---
+
+## D-024 — Workshop uploads never block the thread that pumps Steam callbacks
+
+**Decision:** Snapshot building remains synchronous, but uploads are asynchronous. Single-player/Host-client unloads start a background task; the menu/game loop pumps Steam callbacks via `WorkshopService.PumpCallbacks()`. Authoritative server shutdown blocks, but a helper thread runs the upload and pumps callbacks while the main thread waits (bounded by the upload timeout). The registry is marked pending **before** the upload starts and cleared only on success.
+
+**Why:** Steamworks `CallResult` callbacks are dispatched by `SteamAPI.RunCallbacks()`. `OnWorldUnload` originally waited for the upload on the main thread, so the callbacks could never run and the server deadlocked at "Saving before exit...". Marking pending first also makes a process exit or crash retryable instead of silently losing the upload.
+
+**Consequence:** A normal save/exit returns to the title screen immediately; publishing finishes in the background and the UI refreshes. A Host & Play server can take up to the configured upload timeout to exit (tModLoader's watchdog logs a warning after 10s). If Steam requires the Workshop Legal Agreement, the result stays pending and the world record carries `PendingNeedsEula` for the UI.
+
+---
+
+## D-025 — EULA is a per-account user action, surfaced not automated
+
+**Decision:** The server upload result's `NeedsEula` flag is stored on the pending record. The world list/detail shows **EULA needed**, and the detail screen offers **Accept Workshop EULA** (`SteamUGC.ShowWorkshopEULA`). The mod never tries to accept the agreement itself. Users can also accept it in the Steam client.
+
+**Why:** The Workshop Legal Agreement is a legal acceptance tied to a Steam account, not an API state the mod can click through. The server process has no overlay, so the prompt must be raised on the host client (launched through Steam) or in the Steam client.
+
+**Consequence:** A newly created item can be fully uploaded but remain pending/invisible to friends until the owner accepts once. The snapshot and item ID are retained; **Publish pending** retries after acceptance. This is a release gate for the two-account test.

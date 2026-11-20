@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using Terraria;
 using Terraria.Audio;
 using Terraria.GameContent.UI.Elements;
@@ -10,9 +11,9 @@ using SharedWorlds.Core;
 namespace SharedWorlds.UI;
 
 /// <summary>
-/// tModLoader has no public hook for adding a vanilla main-menu button. This attaches one
-/// small button to the active ModMenu's UserInterface (or to its current UIState) while the
-/// title screen is visible. F9 is the fallback if a menu mod replaces this surface.
+/// tModLoader has no public hook for adding a vanilla main-menu button. The active ModMenu's
+/// UserInterface is drawn over the title screen, so we keep one small button attached there.
+/// F9 also opens the screen, including when a menu theme or mod replaces that surface.
 /// </summary>
 [Autoload(Side = ModSide.Client)]
 public sealed class MainMenuButtonSystem : ModSystem
@@ -21,6 +22,7 @@ public sealed class MainMenuButtonSystem : ModSystem
 	private UIState? _ownedState;
 	private UIState? _attachedState;
 	private ModMenu? _attachedMenu;
+	private bool _f9Down;
 
 	public override void Load()
 	{
@@ -54,17 +56,28 @@ public sealed class MainMenuButtonSystem : ModSystem
 		_ownedState = null;
 	}
 
-	public override void PostUpdateEverything()
+	public override void PostUpdateInput()
 	{
 		if (Main.dedServ || _button == null || _ownedState == null)
 			return;
 
-		if (!SharedWorldsConfig.Current.ShowMainMenuButton) {
+		bool onTitleScreen = Main.gameMenu && Main.menuMode == 0;
+		if (!onTitleScreen) {
 			Detach();
+			_f9Down = false;
 			return;
 		}
 
-		if (!Main.gameMenu || Main.menuMode != 0 || Main.MenuUI.CurrentState != null) {
+		bool f9 = Main.keyState.IsKeyDown(Keys.F9);
+		if (f9 && !_f9Down) {
+			SoundEngine.PlaySound(SoundID.MenuOpen);
+			SharedWorldsUI.Open();
+			_f9Down = true;
+			return;
+		}
+		_f9Down = f9;
+
+		if (!SharedWorldsConfig.Current.ShowMainMenuButton) {
 			Detach();
 			return;
 		}

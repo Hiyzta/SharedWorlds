@@ -319,21 +319,48 @@ public sealed class SharedWorldsService
 			record.PendingSnapshotDir = null;
 			record.PendingVersion = 0;
 			record.PendingHash = null;
+			record.PendingNeedsEula = false;
 
 			Registry.RecordVersion(record.WorldId, built.Manifest.AsVersionRecord, Config.MaxHistoryEntries);
 			record.History = Registry.FindByWorldId(record.WorldId)?.History ?? record.History;
 
 			bool shouldUpload = record.WorkshopStorageEnabled && Config.AutoUploadOnWorldExit;
 			if (shouldUpload && WorkshopService.IsAvailable) {
-				UploadResult upload = UploadSnapshotAsync(record, built.SnapshotDir, built.Manifest, null, CancellationToken.None)
-					.GetAwaiter().GetResult();
+				// Mark the snapshot pending before starting the upload. If the process exits
+				// before Steam finishes, the snapshot is retried on the next launch instead
+				// of being silently lost.
+				QueuePending(record, built.SnapshotDir, built.Version, built.ContentHash);
+				Registry.Update(record);
+				Registry.Save();
 
-				if (upload.Success) {
-					LastStatus = $"Published '{record.WorldName}' v{record.LocalVersion} to Workshop.";
-					Log.Info(LastStatus);
+				if (Main.dedServ || Main.netMode == NetmodeID.Server) {
+					// The server is about to exit: the main thread will not pump Steam
+					// callbacks anymore, so a helper thread pumps them while we wait.
+					UploadResult upload = UploadWithPump(record, built.SnapshotDir, built.Manifest);
+					CompleteUpload(record, built.SnapshotDir, built.Version, built.ContentHash, upload);
 				}
 				else {
-					MarkPending(record, built.SnapshotDir, built.Version, built.ContentHash, upload);
+					SharedWorldRecord uploadRecord = record;
+					string snapshotDir = built.SnapshotDir;
+					SnapshotManifest manifest = built.Manifest;
+					_ = Task.Run(() => {
+						UploadResult upload;
+						try {
+							upload = UploadSnapshotAsync(uploadRecord, snapshotDir, manifest, null, CancellationToken.None)
+								.GetAwaiter().GetResult();
+						}
+						catch (Exception e) {
+							upload = new UploadResult {
+								Success = false,
+								Pending = true,
+								ItemId = uploadRecord.WorkshopItemId,
+								Message = "Workshop upload failed: " + e.Message,
+								Exception = e
+							};
+						}
+
+						Main.QueueMainThreadAction(() => CompleteUpload(uploadRecord, snapshotDir, manifest.Version, manifest.ContentHash, upload));
+					});
 				}
 			}
 			else {
@@ -363,12 +390,110 @@ public sealed class SharedWorldsService
 		}
 	}
 
+	private void QueuePending(SharedWorldRecord record, string snapshotDir, int version, string hash)
+	{
+		record.PendingUpload = true;
+		record.PendingSnapshotDir = Path.GetRelativePath(SharedWorldPaths.Root, snapshotDir);
+		record.PendingVersion = version;
+		record.PendingHash = hash;
+		record.PendingNeedsEula = false;
+	}
+
+	private UploadResult UploadWithPump(SharedWorldRecord record, string snapshotDir, SnapshotManifest manifest)
+	{
+		UploadResult? result = null;
+		Exception? error = null;
+
+		var thread = new Thread(() => {
+			try {
+				Task<UploadResult> task = UploadSnapshotAsync(record, snapshotDir, manifest, null, CancellationToken.None);
+				while (!task.IsCompleted) {
+					WorkshopService.PumpCallbacks();
+					Thread.Sleep(10);
+				}
+
+				result = task.GetAwaiter().GetResult();
+			}
+			catch (Exception e) {
+				error = e;
+			}
+		}) {
+			IsBackground = false,
+			Name = "SharedWorlds Workshop Upload"
+		};
+
+		thread.Start();
+		int timeout = Math.Max(30, Config.UploadTimeoutSeconds) + 30;
+		if (!thread.Join(TimeSpan.FromSeconds(timeout))) {
+			return new UploadResult {
+				Success = false,
+				Pending = true,
+				ItemId = record.WorkshopItemId,
+				Message = "Workshop upload timed out during server shutdown. It will be retried next time."
+			};
+		}
+
+		if (error != null) {
+			return new UploadResult {
+				Success = false,
+				Pending = true,
+				ItemId = record.WorkshopItemId,
+				Message = "Workshop upload failed during server shutdown: " + error.Message,
+				Exception = error
+			};
+		}
+
+		return result ?? new UploadResult {
+			Success = false,
+			Pending = true,
+			ItemId = record.WorkshopItemId,
+			Message = "Workshop upload did not return a result."
+		};
+	}
+
+	private void CompleteUpload(SharedWorldRecord record, string snapshotDir, int version, string hash, UploadResult upload)
+	{
+		SharedWorldRecord? latest = Registry.FindByWorldId(record.WorldId) ?? record;
+
+		if (upload.Success) {
+			if (latest.PendingVersion == version ||
+				string.Equals(latest.PendingHash, hash, StringComparison.OrdinalIgnoreCase)) {
+				latest.PendingUpload = false;
+				latest.PendingSnapshotDir = null;
+				latest.PendingVersion = 0;
+				latest.PendingHash = null;
+				latest.PendingNeedsEula = false;
+			}
+
+			LastStatus = $"Published '{latest.WorldName}' v{version} to Workshop.";
+			Log.Info(LastStatus);
+		}
+		else if (latest.LocalVersion > version && latest.PendingVersion == version) {
+			// A newer local snapshot superseded this upload; it is queued separately.
+			latest.PendingUpload = false;
+			latest.PendingSnapshotDir = null;
+			latest.PendingVersion = 0;
+			latest.PendingHash = null;
+			latest.PendingNeedsEula = false;
+			LastStatus = $"Skipped Workshop upload of older v{version}; local v{latest.LocalVersion} is newer.";
+			Log.Info(LastStatus);
+		}
+		else {
+			MarkPending(latest, snapshotDir, version, hash, upload);
+		}
+
+		Registry.Update(latest);
+		Registry.Save();
+		Changed?.Invoke();
+	}
+
 	private void MarkPending(SharedWorldRecord record, string snapshotDir, int version, string hash, UploadResult upload)
 	{
 		record.PendingUpload = true;
 		record.PendingSnapshotDir = Path.GetRelativePath(SharedWorldPaths.Root, snapshotDir);
 		record.PendingVersion = version;
 		record.PendingHash = hash;
+		record.PendingNeedsEula = upload.NeedsEula;
 		LastStatus = "Snapshot saved locally; Workshop upload is pending. " + upload.Message;
 
 		if (upload.NeedsEula)
@@ -394,6 +519,7 @@ public sealed class SharedWorldsService
 			record.PendingSnapshotDir = null;
 			record.PendingVersion = 0;
 			record.PendingHash = null;
+			record.PendingNeedsEula = false;
 			Registry.Update(record);
 			Registry.Save();
 			Changed?.Invoke();
@@ -1119,6 +1245,7 @@ public sealed class SharedWorldsService
 	/// <summary>Called from ModSystem.PostUpdateEverything on the client. Starts a queued Open to friends once the title screen is ready.</summary>
 	public void Tick()
 	{
+		WorkshopService.PumpCallbacks();
 		HostAndPlay.Tick();
 
 		if (!HostAndPlay.PendingOpenToFriendsReady || Main.dedServ)
@@ -1181,7 +1308,7 @@ public sealed class SharedWorldsService
 		sb.AppendLine($"Local snapshot: v{record.LocalVersion} {HashUtil.Short(record.LocalHash)}");
 		sb.AppendLine($"Last host: {WorkshopService.PersonaName(record.LastHostSteamId)}");
 		sb.AppendLine($"This account's item: {(record.WorkshopItemId == 0 ? "not created" : record.WorkshopItemId.ToString())}");
-		sb.AppendLine($"Pending upload: {(record.PendingUpload ? "yes" : "no")}");
+		sb.AppendLine($"Pending upload: {(record.PendingUpload ? "yes" : "no")}{(record.PendingNeedsEula ? " (Steam Workshop EULA not accepted)" : "")}");
 		sb.AppendLine($"Participants: {record.Participants.Count}");
 		foreach (KeyValuePair<string, ulong> p in record.Participants.OrderBy(p => p.Key))
 			sb.AppendLine($"  {WorkshopService.PersonaName(ulong.TryParse(p.Key, out ulong id) ? id : 0)}: {p.Value}");

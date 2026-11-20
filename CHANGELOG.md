@@ -2,6 +2,34 @@
 
 All notable changes to Shared Worlds are documented here. The format follows Keep a Changelog; versions use SemVer.
 
+## [0.1.1] - 2026-11-20
+
+### Fixed
+
+- Main-menu button and "Open to friends" continuation: `PostUpdateEverything` is not called on the title screen in tModLoader, so menu work now runs from `PostUpdateInput`.
+- In-game `F9` no longer throws `KeyNotFoundException` while mods are still initializing at the menu; the keybind is only read in-game.
+- Workshop uploads no longer block the Steam callback thread. Single-player uploads run in the background and the menu pumps callbacks; server-shutdown uploads use a helper thread that pumps callbacks while the main thread waits.
+- Snapshots are marked pending before the upload starts, so an interrupted upload is retried instead of being lost.
+- The main UI now fits an 800x720 window; fixed oversized panels and clipped buttons.
+- `icon_small.png` is now the expected 30x30.
+
+### Added
+
+- Steam Workshop EULA status is kept on the pending record; the world detail screen offers an "Accept Workshop EULA" action and shows "EULA needed" on the list.
+- Single-account end-to-end verification: item creation, friends-only upload, metadata query, download, hash verification, install, and version fast-forward (Steam item `3842489661`).
+
+### Changed
+
+- Repository links and mod metadata now point at `Hiyzta/SharedWorlds`; version is `0.1.1`.
+
+### Known limitations
+
+- Friends-only visibility to a second Steam account and the Steam overlay EULA flow still need a second logged-in account/manual check.
+- No Steam Cloud worlds.
+- No live single-player → multiplayer conversion.
+- Peer transfer does not hard-block quitting.
+- A server shutdown can wait up to the configured upload timeout (the watchdog logs a warning after 10s) while a snapshot uploads.
+
 ## [0.1.0] - 2026-11-18
 
 ### Added
