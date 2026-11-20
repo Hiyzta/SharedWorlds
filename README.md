@@ -121,6 +121,8 @@ If auto-upload is enabled, the registry is marked **pending first**, then the sn
 | Not Steam friends with an item owner | Friends-only item is inaccessible; the mod warns. |
 | Local world edited/restored outside the mod | Recorded as a new local head with the previous hash as parent; can become a branch. |
 
+More detail: [docs/EDGE-CASES.md](docs/EDGE-CASES.md).
+
 ---
 
 ## Requirements
