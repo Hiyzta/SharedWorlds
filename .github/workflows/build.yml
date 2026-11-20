@@ -43,6 +43,18 @@ jobs:
           </Project>
           EOF
 
+      - name: Prepare tModLoader native libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd .tml/Libraries/Native/Linux
+          ln -sf libFNA3D.so.0 FNA3D.so
+          ln -sf libFNA3D.so.0 libFNA3D.so
+          ln -sf libFAudio.so.0 FAudio.so
+          ln -sf libFAudio.so.0 libFAudio.so
+          ln -sf libSDL2-2.0.so.0 libSDL2.so
+          echo "LD_LIBRARY_PATH=${GITHUB_WORKSPACE}/.tml/Libraries/Native/Linux:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+
       - name: Restore and build
         shell: bash
         run: |
