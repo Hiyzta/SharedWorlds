@@ -357,6 +357,7 @@ What was actually run:
   - Registered `The Old Simp` from the title screen, used **Host** to launch the real Host & Play flow, selected the character, joined the local server, and let the server shut down.
   - The authoritative server built v1/v2 snapshots and uploaded them to newly created Workshop item **3842489661**. The item was set to **FriendsOnly** and labelled as storage, not a mod.
   - Creating the item and uploading content succeeded. Steam returned `m_bUserNeedsToAcceptWorkshopLegalAgreement = true`; the item stays pending until the account accepts the one-time Workshop Legal Agreement. This is the only remaining publish blocker.
+  - A direct Steamworks query from a separate harness confirmed the item is `k_ERemoteStoragePublishedFileVisibilityFriendsOnly`, not banned, owned by the test account, with the correct metadata. `SteamUGC.GetWorkshopEULAStatus()` returned `k_EResultOK` with `m_bNeedsAction = true` even after accepting the general Steam Subscriber Agreement page; the acceptance must be the app-specific **Steam Workshop Legal Agreement** page/overlay for tModLoader (app 1281930), not the general web page.
   - A fresh save with only the v1 snapshot and the participant/item ID downloaded v2 from the item, verified `world.wld`/`world.twld` hashes, matched the metadata, installed it, and fast-forwarded the local record to v2.
   - Main-menu button, world picker, world list, sync, detail, in-game F9 panel, and Host & Play launch were exercised in the real UI.
 - **Bugs found and fixed during the UI test:**

@@ -196,7 +196,7 @@ Start tModLoader through Steam, not by running the executable directly. GOG/offl
 The owner's item is friends-only. Add each other on Steam. The error names the account.
 
 **Upload says pending**
-The snapshot is safe locally. Open Shared Worlds → Info → **Publish pending**, or wait until the next save. Check the tModLoader log for the Steam error. If Steam needs the Workshop Legal Agreement, the world shows **EULA needed**; open **Info** and use **Accept Workshop EULA**, accept the overlay prompt once, then **Publish pending**. The server process cannot show the overlay, so accept it on the host client or in the Steam client.
+The snapshot is safe locally. Open Shared Worlds → Info → **Publish pending**, or wait until the next save. Check the tModLoader log for the Steam error. If Steam needs the Workshop Legal Agreement, the world shows **EULA needed**; open **Info** and use **Accept Workshop EULA**, accept the overlay prompt once, then **Publish pending**. The server process cannot show the overlay, so accept it on the host client launched through Steam. The general **Steam Subscriber Agreement** page is not the same agreement; the page title must say **Steam Workshop Legal Agreement**.
 
 **"Downloaded snapshot does not match the queried version metadata"**
 Steam has not finished propagating the update, or an item was changed mid-query. Retry in a minute. The mod refuses to install mismatched content.

@@ -21,6 +21,7 @@ All notable changes to Shared Worlds are documented here. The format follows Kee
 ### Changed
 
 - Repository links and mod metadata now point at `Hiyzta/SharedWorlds`; version is `0.1.1`.
+- CI now prepares the Linux tModLoader native libraries before building, so the GitHub Actions build and tagged `.tmod` release succeed.
 
 ### Known limitations
 
