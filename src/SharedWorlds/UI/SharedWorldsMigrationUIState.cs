@@ -86,7 +86,7 @@ public sealed class SharedWorldsMigrationUIState : UIState
 		float buttonTop = panelHeight - 68;
 		_primary = SharedWorldsUIState.MakeButton("Rehost now", 24, buttonTop, 166, PrimaryClicked);
 		_decline = SharedWorldsUIState.MakeButton("Not now", 202, buttonTop, 124, DeclineClicked);
-		_back = SharedWorldsUIState.MakeButton("Back to title", panelWidth - 164, buttonTop, 140, BackClicked);
+		_back = SharedWorldsUIState.MakeButton("Back", panelWidth - 164, buttonTop, 140, BackClicked);
 		panel.Append(_primary);
 		panel.Append(_decline);
 		panel.Append(_back);

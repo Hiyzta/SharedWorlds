@@ -136,6 +136,8 @@ public sealed class MultiplayerMenuSystem : ModSystem
 	private static void AddMenuRow(string[] labels)
 	{
 		int offset = SocialAPI.Network != null ? 1 : 0;
+		if (labels.Length <= 3 + offset)
+			return;
 
 		// The vanilla branch has already written Back at 2 + offset. Move it down and
 		// place the new row in the slot directly above Back.
