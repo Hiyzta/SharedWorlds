@@ -16,7 +16,7 @@ All notable changes to Shared Worlds are documented here. The format follows Kee
 ### Added
 
 - Steam Workshop EULA status is kept on the pending record; the world detail screen offers an "Accept Workshop EULA" action and shows "EULA needed" on the list.
-- Single-account end-to-end verification: item creation, friends-only upload, metadata query, download, hash verification, install, and version fast-forward (Steam item `3842489661`).
+- Single-account end-to-end verification: item creation, friends-only upload, metadata query, download, hash verification, install, and version fast-forward (temporary Workshop item, deleted after testing).
 
 ### Changed
 

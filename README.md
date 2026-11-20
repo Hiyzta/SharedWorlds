@@ -243,7 +243,7 @@ dotnet tModLoader.dll -server \
 
 The log should show the mod loading, a snapshot being built after Save/Exit, and no exceptions.
 
-**Single-account verification (2026-11-20):** registered a world, started Host & Play, saved on server shutdown, created Workshop item `3842489661`, published v1/v2 as friends-only, queried it back, downloaded it into a fresh save, verified the hashes, and fast-forwarded to v2. The main-menu button, world picker, sync, detail, in-game panel, and Host & Play launch were exercised through the real UI.
+**Single-account verification (2026-11-20):** registered a world, started Host & Play, saved on server shutdown, created a temporary Workshop item, published v1/v2 as friends-only, queried it back, downloaded it into a fresh save, verified the hashes, and fast-forwarded to v2. The main-menu button, world picker, sync, detail, in-game panel, and Host & Play launch were exercised through the real UI.
 
 **Still needs a second Steam account:** friends-only visibility/query/download, the Steam overlay EULA prompt, and peer transfer to a non-host client. Those are the remaining release gates.
 
