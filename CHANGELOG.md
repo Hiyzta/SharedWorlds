@@ -2,6 +2,12 @@
 
 All notable changes to Shared Worlds are documented here. The format follows Keep a Changelog; versions use SemVer.
 
+## [0.1.2] - 2026-11-20
+
+### Fixed
+
+- The "world unchanged, pending upload" path in `OnWorldUnload` still waited synchronously for Steam callbacks on the main thread. It now uses the same asynchronous single-player path and callback-pumping server path as new snapshots, so a save with no content changes cannot deadlock the server or the title-screen return.
+
 ## [0.1.1] - 2026-11-20
 
 ### Fixed

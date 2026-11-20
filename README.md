@@ -4,7 +4,7 @@ A tModLoader mod that lets a group of friends share **one** Terraria world acros
 
 Steam already handles multiplayer (Host & Play, Steam friends, lobbies, P2P). Shared Worlds solves the part Steam does not: **where the newest world file lives** and **how the next host gets it**.
 
-> Status: **0.1.1, early development.** The snapshot, versioning, fork-detection, main-menu, in-game panel, Host & Play, and single-account Workshop create/upload/query/download paths are implemented and tested. Friends-only access from a **second** Steam account and the Steam overlay EULA flow still need a two-account manual check. See [Testing](#testing).
+> Status: **0.1.2, early development.** The snapshot, versioning, fork-detection, main-menu, in-game panel, Host & Play, and single-account Workshop create/upload/query/download paths are implemented and tested. Friends-only access from a **second** Steam account and the Steam overlay EULA flow still need a two-account manual check. See [Testing](#testing).
 
 ---
 

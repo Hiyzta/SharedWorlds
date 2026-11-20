@@ -300,10 +300,37 @@ public sealed class SharedWorldsService
 				LastStatus = built.Message;
 
 				if (record.PendingUpload && record.WorkshopStorageEnabled && WorkshopService.IsAvailable) {
-					UploadResult retry = RetryPendingAsync(record, null, CancellationToken.None).GetAwaiter().GetResult();
-					LastStatus = retry.Success
-						? $"Published pending snapshot v{record.LocalVersion} to Workshop."
-						: "Snapshot unchanged; pending Workshop upload is still waiting: " + retry.Message;
+					if (Main.dedServ || Main.netMode == NetmodeID.Server) {
+						UploadResult retry = RetryPendingWithPump(record);
+						LastStatus = retry.Success
+							? $"Published pending snapshot v{record.LocalVersion} to Workshop."
+							: "Snapshot unchanged; pending Workshop upload is still waiting: " + retry.Message;
+					}
+					else {
+						SharedWorldRecord retryRecord = record;
+						_ = Task.Run(() => {
+							UploadResult retry;
+							try {
+								retry = RetryPendingAsync(retryRecord, null, CancellationToken.None).GetAwaiter().GetResult();
+							}
+							catch (Exception e) {
+								retry = new UploadResult {
+									Success = false,
+									Pending = true,
+									ItemId = retryRecord.WorkshopItemId,
+									Message = "Pending Workshop upload failed: " + e.Message,
+									Exception = e
+								};
+							}
+
+							Main.QueueMainThreadAction(() => {
+								LastStatus = retry.Success
+									? $"Published pending snapshot v{retryRecord.LocalVersion} to Workshop."
+									: "Snapshot unchanged; pending Workshop upload is still waiting: " + retry.Message;
+								Changed?.Invoke();
+							});
+						});
+					}
 				}
 
 				return;
@@ -448,6 +475,58 @@ public sealed class SharedWorldsService
 			Pending = true,
 			ItemId = record.WorkshopItemId,
 			Message = "Workshop upload did not return a result."
+		};
+	}
+
+	private UploadResult RetryPendingWithPump(SharedWorldRecord record)
+	{
+		UploadResult? result = null;
+		Exception? error = null;
+
+		var thread = new Thread(() => {
+			try {
+				Task<UploadResult> task = RetryPendingAsync(record, null, CancellationToken.None);
+				while (!task.IsCompleted) {
+					WorkshopService.PumpCallbacks();
+					Thread.Sleep(10);
+				}
+
+				result = task.GetAwaiter().GetResult();
+			}
+			catch (Exception e) {
+				error = e;
+			}
+		}) {
+			IsBackground = false,
+			Name = "SharedWorlds Pending Upload"
+		};
+
+		thread.Start();
+		int timeout = Math.Max(30, Config.UploadTimeoutSeconds) + 30;
+		if (!thread.Join(TimeSpan.FromSeconds(timeout))) {
+			return new UploadResult {
+				Success = false,
+				Pending = true,
+				ItemId = record.WorkshopItemId,
+				Message = "Pending Workshop upload timed out during server shutdown. It will be retried next time."
+			};
+		}
+
+		if (error != null) {
+			return new UploadResult {
+				Success = false,
+				Pending = true,
+				ItemId = record.WorkshopItemId,
+				Message = "Pending Workshop upload failed during server shutdown: " + error.Message,
+				Exception = error
+			};
+		}
+
+		return result ?? new UploadResult {
+			Success = false,
+			Pending = true,
+			ItemId = record.WorkshopItemId,
+			Message = "Pending Workshop upload did not return a result."
 		};
 	}
 
