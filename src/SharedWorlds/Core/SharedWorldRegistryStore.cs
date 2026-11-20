@@ -36,6 +36,8 @@ public sealed class SharedWorldRegistryStore
 					record.Participants ??= new Dictionary<string, ulong>();
 					record.History ??= new List<VersionRecord>();
 					record.Mods ??= new List<ModEntry>();
+					if (record.PendingUpload && record.PendingUpdatedUtc == default)
+						record.PendingUpdatedUtc = record.LastUpdatedUtc == default ? DateTime.UtcNow : record.LastUpdatedUtc;
 				}
 			}
 			catch (Exception e) {
@@ -160,10 +162,6 @@ private static void MergeRecords(SharedWorldRecord target, SharedWorldRecord oth
 		target.LastHostSteamId = other.LastHostSteamId;
 		target.LastUpdatedUtc = other.LastUpdatedUtc;
 		target.Mods = other.Mods ?? target.Mods;
-		target.PendingUpload = other.PendingUpload;
-		target.PendingSnapshotDir = other.PendingSnapshotDir;
-		target.PendingVersion = other.PendingVersion;
-		target.PendingHash = other.PendingHash;
 	}
 
 	if (string.IsNullOrWhiteSpace(target.WorldFileName) && !string.IsNullOrWhiteSpace(other.WorldFileName))
@@ -175,11 +173,16 @@ private static void MergeRecords(SharedWorldRecord target, SharedWorldRecord oth
 	if (target.WorkshopItemId == 0 && other.WorkshopItemId != 0)
 		target.WorkshopItemId = other.WorkshopItemId;
 
-	if (!target.PendingUpload && other.PendingUpload) {
-		target.PendingUpload = true;
+	// Pending is a state transition, not a monotonic flag: upload can clear it. The
+	// last writer wins by timestamp so a client/server stale copy cannot resurrect a
+	// pending upload that the authoritative process just completed.
+	if (other.PendingUpdatedUtc > target.PendingUpdatedUtc) {
+		target.PendingUpload = other.PendingUpload;
 		target.PendingSnapshotDir = other.PendingSnapshotDir;
 		target.PendingVersion = other.PendingVersion;
 		target.PendingHash = other.PendingHash;
+		target.PendingNeedsEula = other.PendingNeedsEula;
+		target.PendingUpdatedUtc = other.PendingUpdatedUtc;
 	}
 }
 
@@ -349,5 +352,7 @@ private static void CopyInto(SharedWorldRecord target, SharedWorldRecord source)
 	target.PendingSnapshotDir = source.PendingSnapshotDir;
 	target.PendingVersion = source.PendingVersion;
 	target.PendingHash = source.PendingHash;
+	target.PendingNeedsEula = source.PendingNeedsEula;
+	target.PendingUpdatedUtc = source.PendingUpdatedUtc;
 }
 }

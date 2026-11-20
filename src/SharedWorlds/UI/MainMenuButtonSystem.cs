@@ -36,7 +36,8 @@ public sealed class MainMenuButtonSystem : ModSystem
 			VAlign = 0f,
 			Left = StyleDimension.FromPixels(-24),
 			Top = StyleDimension.FromPixels(112),
-			BackgroundColor = new Color(25, 55, 75, 220)
+			BackgroundColor = new Color(22, 48, 66, 235),
+			BorderColor = new Color(82, 174, 192, 220)
 		};
 
 		_button.OnLeftClick += (_, _) => {

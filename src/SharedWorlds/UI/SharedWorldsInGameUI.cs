@@ -106,46 +106,61 @@ public sealed class SharedWorldsInGamePanel : UIState
 	public override void OnInitialize()
 	{
 		var panel = new UIPanel {
-			Width = StyleDimension.FromPixels(560),
-			Height = StyleDimension.FromPixels(360),
+			Width = StyleDimension.FromPixels(600),
+			Height = StyleDimension.FromPixels(400),
 			HAlign = 0.5f,
 			VAlign = 0.5f,
-			BackgroundColor = new Color(16, 28, 42, 245)
+			BackgroundColor = new Color(13, 23, 36, 246),
+			BorderColor = new Color(52, 92, 112, 255)
 		};
 		Append(panel);
 
-		panel.Append(new UIText("Shared Worlds", 1f, large: true) {
-			HAlign = 0.5f,
-			Top = StyleDimension.FromPixels(14)
+		panel.Append(new UIPanel {
+			Width = StyleDimension.FromPixelsAndPercent(0, 1f),
+			Height = StyleDimension.FromPixels(64),
+			BackgroundColor = new Color(22, 46, 64, 255),
+			BorderColor = new Color(52, 92, 112, 255)
 		});
 
-		_body = new UIText("", 0.7f) {
-			Left = StyleDimension.FromPixels(20),
-			Top = StyleDimension.FromPixels(58),
-			Width = StyleDimension.FromPixels(520),
-			Height = StyleDimension.FromPixels(110),
+		panel.Append(new UIText("Shared Worlds", 1f, large: true) {
+			HAlign = 0.5f,
+			Top = StyleDimension.FromPixels(8)
+		});
+
+		panel.Append(new UIText("In-game snapshot controls", 0.62f) {
+			HAlign = 0.5f,
+			Top = StyleDimension.FromPixels(38),
+			TextColor = new Color(120, 200, 214)
+		});
+
+		_body = new UIText("", 0.68f) {
+			Left = StyleDimension.FromPixels(22),
+			Top = StyleDimension.FromPixels(76),
+			Width = StyleDimension.FromPixels(556),
+			Height = StyleDimension.FromPixels(118),
 			IsWrapped = true,
-			TextColor = new Color(180, 215, 230)
+			TextColor = new Color(185, 220, 232)
 		};
 		panel.Append(_body);
 
-		_openButton = SharedWorldsUIState.MakeButton("Open to friends", 20, 180, 170, OpenToFriends);
+		_openButton = SharedWorldsUIState.MakeButton("Open to friends", 22, 212, 170, OpenToFriends);
 		panel.Append(_openButton);
 
-		_syncButton = SharedWorldsUIState.MakeButton("Sync & publish", 200, 180, 150, SyncAndPublish);
+		_syncButton = SharedWorldsUIState.MakeButton("Sync & publish", 204, 212, 150, SyncAndPublish);
 		panel.Append(_syncButton);
 
-		_pendingButton = SharedWorldsUIState.MakeButton("Upload pending", 360, 180, 150, UploadPending);
+		_pendingButton = SharedWorldsUIState.MakeButton("Upload pending", 366, 212, 150, UploadPending);
 		panel.Append(_pendingButton);
 
-		panel.Append(SharedWorldsUIState.MakeButton("Close", 20, 300, 100, _owner.Close));
-		panel.Append(new UIText("F9 toggles this panel. 'Open to friends' saves, exits to the title screen and starts Host & Play.", 0.6f) {
-			Left = StyleDimension.FromPixels(20),
-			Top = StyleDimension.FromPixels(238),
-			Width = StyleDimension.FromPixels(520),
+		panel.Append(new UIText("F9 toggles this panel. 'Open to friends' saves, exits to the title screen and starts Host & Play.", 0.58f) {
+			Left = StyleDimension.FromPixels(22),
+			Top = StyleDimension.FromPixels(262),
+			Width = StyleDimension.FromPixels(556),
 			IsWrapped = true,
-			TextColor = new Color(140, 175, 190)
+			TextColor = new Color(132, 168, 182)
 		});
+
+		panel.Append(SharedWorldsUIState.MakeButton("Close", 22, 334, 100, _owner.Close));
 	}
 
 	public void Refresh()
@@ -161,10 +176,10 @@ public sealed class SharedWorldsInGamePanel : UIState
 
 		_body.SetText(
 			$"{record.WorldName}\n" +
-			$"Local snapshot: v{record.LocalVersion} {HashUtil.Short(record.LocalHash)}\n" +
+			$"Local snapshot: {(record.LocalVersion == 0 ? "none" : $"v{record.LocalVersion} {HashUtil.Short(record.LocalHash)}")}\n" +
 			$"Last host: {WorkshopService.PersonaName(record.LastHostSteamId)}\n" +
 			$"This account's item: {(record.WorkshopItemId == 0 ? "not created yet" : record.WorkshopItemId.ToString())}\n" +
-			$"Workshop: {(record.PendingUpload ? "upload pending" : "no pending upload")}");
+			$"Workshop: {(record.PendingNeedsEula ? "EULA needed" : record.PendingUpload ? "upload pending" : "no pending upload")}");
 
 		_openButton.SetText("Open to friends");
 		_syncButton.SetText(Main.netMode == NetmodeID.MultiplayerClient ? "Sync & publish" : "Host only");

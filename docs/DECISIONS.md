@@ -281,8 +281,28 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 
 ## D-025 — EULA is a per-account user action, surfaced not automated
 
-**Decision:** The server upload result's `NeedsEula` flag is stored on the pending record. The world list/detail shows **EULA needed**, and the detail screen offers **Accept Workshop EULA** (`SteamUGC.ShowWorkshopEULA`). The mod never tries to accept the agreement itself. Users can also accept it in the Steam client.
+**Decision:** The server upload result's `NeedsEula` flag is stored on the pending record. The world list/detail shows **EULA needed** and tells the user to accept it in the Steam client; the mod does not open the overlay or add a permanent EULA button. The one-time user action is: open the app-specific `workshoplegalagreement` page for tModLoader (or the Steam overlay), accept **both** the Steam Subscriber Agreement and the Workshop Legal Agreement, then **Publish pending**. The mod never tries to accept the agreement itself.
 
-**Why:** The Workshop Legal Agreement is a legal acceptance tied to a Steam account, not an API state the mod can click through. The server process has no overlay, so the prompt must be raised on the host client (launched through Steam) or in the Steam client.
+**Why:** The Workshop Legal Agreement is a legal acceptance tied to a Steam account, not an API state the mod can click through. A permanent EULA button is noise for the 99% of sessions after the one-time acceptance; auto-opening the overlay is intrusive. The server process has no overlay anyway.
 
-**Consequence:** A newly created item can be fully uploaded but remain pending/invisible to friends until the owner accepts once. The snapshot and item ID are retained; **Publish pending** retries after acceptance. This is a release gate for the two-account test.
+**Consequence:** A newly created item can be fully uploaded but remain pending/invisible to friends until the owner accepts once. The snapshot and item ID are retained; **Publish pending** retries after acceptance. This is a release gate for the two-account test. The app-specific page has two agreements, and accepting only the Subscriber Agreement is not enough.
+
+---
+
+## D-026 — Pending upload is a timestamped transition, not a monotonic flag
+
+**Decision:** `SharedWorldRecord` stores `PendingUpdatedUtc`. `QueuePending`, `MarkPending`, successful clears, peer-transfer clears, and retries all update it. The registry merge applies pending fields from whichever copy has the newer timestamp.
+
+**Why:** The Host & Play client and server share the registry file. The previous merge preserved any on-disk pending flag when the in-memory copy had cleared it, so a completed upload could be marked pending again by the next save. That made the UI show a false pending state and could trigger a redundant re-upload. `PendingNeedsEula` was also missing from the copy path entirely.
+
+**Consequence:** The latest pending transition wins across processes. A stale client can still contribute participants/history, but it cannot resurrect a pending upload the server has completed, and a server can still publish a pending update from the client.
+
+---
+
+## D-027 — Every remote head is an explicit fork choice
+
+**Decision:** When sync finds more than one head, the detail screen creates one confirmed “Use vN short-hash” button per remote head that has a Workshop item ID, instead of offering only `BestRemote`.
+
+**Why:** A version snapshot is not a merge. If Alice and Bob both branched from v3, choosing only the “highest” v4 could silently discard the other branch's changes. Showing each head with its hash, host, and item ID makes the decision explicit.
+
+**Consequence:** Up to three remote heads are shown directly; further heads remain listed in the text. Installing any choice backs up the current world first, and the other branches remain on their owners' items.

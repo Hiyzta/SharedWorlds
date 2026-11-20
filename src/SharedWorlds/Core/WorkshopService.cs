@@ -131,17 +131,6 @@ public static class WorkshopService
 		}
 	}
 
-	public static void ShowEula()
-	{
-		try {
-			if (IsClient)
-				SteamUGC.ShowWorkshopEULA();
-		}
-		catch (Exception e) {
-			Log.Warn("Could not open the Workshop EULA in the Steam overlay.", e);
-		}
-	}
-
 	public static async Task<(bool Success, ulong ItemId, bool NeedsEula, string Message)> CreateItemAsync(TimeSpan timeout)
 	{
 		if (!IsClient)

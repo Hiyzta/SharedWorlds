@@ -355,18 +355,21 @@ What was actually run:
 - **Version/hash tests:** a small console harness covers linear history, fast-forward, forks, missing ancestry, invite round-trips (including Unicode), and deterministic content hashes. All pass.
 - **Single-account Steam Workshop test (2026-11-20):** Steam account `Hiyzta` (76561199542456255).
   - Registered `The Old Simp` from the title screen, used **Host** to launch the real Host & Play flow, selected the character, joined the local server, and let the server shut down.
-  - The authoritative server built v1/v2 snapshots and uploaded them to a newly created temporary Workshop item. The item was set to **FriendsOnly** and labelled as storage, not a mod. It was set to Private and deleted after testing.
-  - Creating the item and uploading content succeeded. Steam returned `m_bUserNeedsToAcceptWorkshopLegalAgreement = true`; the item stays pending until the account accepts the one-time Workshop Legal Agreement. This is the only remaining publish blocker.
-  - A direct Steamworks query from a separate harness confirmed the item is `k_ERemoteStoragePublishedFileVisibilityFriendsOnly`, not banned, owned by the test account, with the correct metadata. `SteamUGC.GetWorkshopEULAStatus()` returned `k_EResultOK` with `m_bNeedsAction = true` even after accepting the general Steam Subscriber Agreement page; the acceptance must be the app-specific **Steam Workshop Legal Agreement** page/overlay for tModLoader (app 1281930), not the general web page.
+  - The authoritative server built v1–v5 snapshots and uploaded them to temporary Workshop items. The items were set to **FriendsOnly** and labelled as storage, not a mod. They were set to Private and deleted after testing.
+  - Creating the item and uploading content succeeded. Steam initially returned `m_bUserNeedsToAcceptWorkshopLegalAgreement = true`. After both Steam agreements were accepted, a later upload completed with `PendingUpload = false`.
+  - A direct Steamworks query from a separate harness confirmed the item is `k_ERemoteStoragePublishedFileVisibilityFriendsOnly`, not banned, owned by the test account, with the correct metadata. `SteamUGC.GetWorkshopEULAStatus()` initially returned `m_bNeedsAction = true` even after accepting the general Steam Subscriber Agreement page. The app-specific page contains **two** agreements; accepting both (the Subscriber Agreement and the Workshop Legal Agreement) changed the result to `m_bNeedsAction = false`. A later upload then completed with `PendingUpload = false`.
   - A fresh save with only the v1 snapshot and the participant/item ID downloaded v2 from the item, verified `world.wld`/`world.twld` hashes, matched the metadata, installed it, and fast-forwarded the local record to v2.
+  - The pending merge was exercised with v1–v5 server uploads. A stale on-disk pending flag was no longer resurrected after a successful upload; the final registry showed `PendingUpload = false`.
   - Main-menu button, world picker, world list, sync, detail, in-game F9 panel, and Host & Play launch were exercised in the real UI.
 - **Bugs found and fixed during the UI test:**
   - `PostUpdateEverything` is **not called on the title screen** (tModLoader's `Main.Update` returns early for the single-player menu). Main-menu button attachment, F9-at-menu, and queued Open-to-friends work moved to `PostUpdateInput`.
   - Reading `ModKeybind.JustPressed` while mods were still initializing at the menu threw `KeyNotFoundException`; the in-game keybind is now read only in-game.
   - Waiting synchronously for Steam callbacks in `OnWorldUnload` deadlocked the server ("Saving before exit..." + watchdog). Single-player uploads now run in the background while the menu pumps callbacks; server-shutdown uploads use a helper thread that pumps callbacks while the main thread waits.
   - A pending snapshot is recorded before the upload starts, so an interrupted upload is retried instead of being lost.
-  - The main UI was larger than an 800x720 window; panels/buttons were resized to fit.
-- **Not yet tested:** friends-only access from a **second** Steam account, the Steam overlay EULA prompt, and peer transfer to a non-host client. These are the remaining release gates.
+  - The main UI was larger than an 800x720 window; panels/buttons were resized to fit. The 0.1.3 layout is responsive from 800x600 up; the visual pass still needs a normal Steam-launched session.
+  - Registry pending state was a monotonic merge flag, so a completed upload could be marked pending again by the next save. It now carries `PendingUpdatedUtc`; the last pending transition wins.
+  - `PendingNeedsEula` and `PendingUpdatedUtc` were missing from `CopyInto`, so they were lost on ordinary registry updates.
+- **Not yet tested:** friends-only access from a **second** Steam account, a second account's first-publish EULA, and peer transfer to a non-host client. These are the remaining release gates.
 
 The smoke tests confirmed an important detail: a freshly registered world with no prior snapshot gets `ParentHash = ""` for v1, not a self-parent. The snapshot builder was adjusted accordingly.
 

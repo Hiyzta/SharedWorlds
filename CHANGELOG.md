@@ -2,6 +2,23 @@
 
 All notable changes to Shared Worlds are documented here. The format follows Keep a Changelog; versions use SemVer.
 
+## [0.1.3] - 2026-11-20
+
+### Changed
+
+- Removed the in-mod Workshop EULA opener (both the permanent screen button and the automatic overlay call). The one-time Steam agreement is handled in the Steam client/overlay; the mod only shows **EULA needed** and asks the user to accept it before publishing again.
+- Redesigned the Shared Worlds, world picker, detail, and in-game panels: responsive sizing for 800x600 and up, cleaner headers/status bars, two-line world rows, readable version/host/item status, and less clipped text.
+- Fork resolution now offers a separate confirmed choice for **each remote head**, not just one “best” remote.
+- Opening the Shared Worlds screen checks a previously pending EULA status in the background and clears the warning if Steam reports it accepted.
+
+### Fixed
+
+- `PendingUpload` could be resurrected by the registry merge because pending was treated as a monotonic flag. Pending state now carries `PendingUpdatedUtc`; the last transition wins, so a completed upload can clear a stale pending record from the other process.
+- `PendingNeedsEula` and `PendingUpdatedUtc` were not copied by the registry update path.
+- A successful server-side upload could still leave `PendingUpload = true` because the pre-upload record was saved again after the upload cleared it. The registry now re-reads the completed record before the final save.
+- Peer “Sync & publish” uploads now record the EULA-needed flag and clear pending on success like the normal path.
+- Server upload helper threads are background threads; a timeout no longer leaves a foreground thread able to hold the process open indefinitely.
+
 ## [0.1.2] - 2026-11-20
 
 ### Fixed

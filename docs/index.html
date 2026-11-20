@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Shared Worlds · a tModLoader multiplayer addon</title>
   <meta name="description" content="Share one Terraria world between friends using per-account Steam Workshop snapshots. No server, no cloud drive, no always-on host.">
+  <meta name="theme-color" content="#07131f">
+  <meta property="og:image" content="https://hiyzta.github.io/SharedWorlds/banner.svg">
+  <meta property="og:title" content="Shared Worlds — one Terraria world, any friend can host">
+  <meta property="og:description" content="Per-account friends-only Steam Workshop snapshots for tModLoader, with version history and fork detection.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,11 +22,12 @@
         or the original creator being online.
       </p>
       <div class="actions">
-        <a class="button primary" href="#how">How it works</a>
+        <a class="button primary" href="https://github.com/Hiyzta/SharedWorlds/releases/latest">Download 0.1.3</a>
+        <a class="button" href="#how">How it works</a>
         <a class="button" href="#install">Install</a>
         <a class="button" href="https://github.com/Hiyzta/SharedWorlds">GitHub</a>
       </div>
-      <p class="status">Status: 0.1.2 · early development · single-account Workshop flow tested</p>
+      <p class="status">Status: 0.1.3 · early development · single-account Workshop flow tested</p>
     </div>
   </header>
 
@@ -96,18 +101,41 @@ Bob ── sync / download ─────────────────�
         <li><strong>Shared Worlds screen</strong> on the main menu: versions, last host, sync status, invites.</li>
         <li><strong>Host</strong> from any account. The original creator is not special.</li>
         <li><strong>Open to friends</strong>: in-game panel → save → title → Host &amp; Play with friends-only lobby visibility.</li>
-        <li><strong>Fork detection</strong> with an explicit remote/local choice; the losing branch stays backed up.</li>
+        <li><strong>Fork detection</strong> with an explicit choice for each remote head; the losing branch stays backed up.</li>
         <li><strong>Peer transfer</strong> in 16 KB verified chunks during a session.</li>
+        <li><strong>Responsive UI</strong> that fits small windows, with per-world version, host, item, participant, and pending/EULA status.</li>
         <li><strong>Backups and retries</strong>: never swap an unverified file; keep pending uploads for later.</li>
       </ul>
+    </section>
+
+    <section class="wrap">
+      <h2>Failure behavior</h2>
+      <div class="grid two">
+        <div class="card">
+          <h3>No silent overwrite</h3>
+          <p>A remote snapshot is installed only after its content hash and ancestry are verified. A fork shows a separate choice for each remote head; the current world is backed up first.</p>
+        </div>
+        <div class="card">
+          <h3>Pending survives interruption</h3>
+          <p>An upload is marked pending before Steam is called. Crash, offline, timeout, or quitting immediately after returning to the title screen leaves the snapshot retryable.</p>
+        </div>
+        <div class="card">
+          <h3>EULA stays out of the way</h3>
+          <p>The mod never opens the Steam overlay. If Steam needs the Workshop Legal Agreement, the world shows <strong>EULA needed</strong>; accept both agreements in the Steam client once.</p>
+        </div>
+        <div class="card">
+          <h3>Large or broken worlds</h3>
+          <p>Snapshots over 64 MB uncompressed are refused. Unreadable manifests, missing files, banned items, and unrelated branches are reported; local files are left alone.</p>
+        </div>
+      </div>
     </section>
 
     <section id="install" class="wrap">
       <h2>Install</h2>
       <div class="grid two">
         <div class="card">
-          <h3>Workshop (after release)</h3>
-          <p>Subscribe in the tModLoader Workshop, enable <em>Shared Worlds</em>, reload mods. Items the mod creates are separate, friends-only storage items — not mods.</p>
+          <h3>Release .tmod</h3>
+          <p>Download the latest <code>.tmod</code> from the <a href="https://github.com/Hiyzta/SharedWorlds/releases/latest">GitHub release</a>, drop it in your tModLoader <code>Mods</code> folder, enable <em>Shared Worlds</em>, and reload mods. Items the mod creates are separate, friends-only storage items — not mods.</p>
         </div>
         <div class="card">
           <h3>From source</h3>
@@ -119,7 +147,8 @@ dotnet build -c Release</code></pre>
         </div>
       </div>
       <p class="fine">Requires tModLoader 1.4.4 stable 2026.09.x and a Steam-launched client. Participating accounts must be Steam friends.<br>
-      <a href="https://github.com/Hiyzta/SharedWorlds/blob/main/README.md">Full install and usage guide →</a></p>
+      <a href="https://github.com/Hiyzta/SharedWorlds/blob/main/README.md">Full install and usage guide →</a> ·
+      <a href="https://github.com/Hiyzta/SharedWorlds/releases/latest">Latest release →</a></p>
     </section>
 
     <section class="wrap">

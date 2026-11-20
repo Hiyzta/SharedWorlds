@@ -347,6 +347,7 @@ public sealed class SharedWorldsService
 			record.PendingVersion = 0;
 			record.PendingHash = null;
 			record.PendingNeedsEula = false;
+			record.PendingUpdatedUtc = DateTime.UtcNow;
 
 			Registry.RecordVersion(record.WorldId, built.Manifest.AsVersionRecord, Config.MaxHistoryEntries);
 			record.History = Registry.FindByWorldId(record.WorldId)?.History ?? record.History;
@@ -365,6 +366,9 @@ public sealed class SharedWorldsService
 					// callbacks anymore, so a helper thread pumps them while we wait.
 					UploadResult upload = UploadWithPump(record, built.SnapshotDir, built.Manifest);
 					CompleteUpload(record, built.SnapshotDir, built.Version, built.ContentHash, upload);
+					// CompleteUpload may have cleared the pending flag; do not re-save the
+					// stale pre-upload record below and resurrect it.
+					record = Registry.FindByWorldId(record.WorldId) ?? record;
 				}
 				else {
 					SharedWorldRecord uploadRecord = record;
@@ -417,6 +421,16 @@ public sealed class SharedWorldsService
 		}
 	}
 
+	private static void ClearPending(SharedWorldRecord record)
+	{
+		record.PendingUpload = false;
+		record.PendingSnapshotDir = null;
+		record.PendingVersion = 0;
+		record.PendingHash = null;
+		record.PendingNeedsEula = false;
+		record.PendingUpdatedUtc = DateTime.UtcNow;
+	}
+
 	private void QueuePending(SharedWorldRecord record, string snapshotDir, int version, string hash)
 	{
 		record.PendingUpload = true;
@@ -424,6 +438,7 @@ public sealed class SharedWorldsService
 		record.PendingVersion = version;
 		record.PendingHash = hash;
 		record.PendingNeedsEula = false;
+		record.PendingUpdatedUtc = DateTime.UtcNow;
 	}
 
 	private UploadResult UploadWithPump(SharedWorldRecord record, string snapshotDir, SnapshotManifest manifest)
@@ -445,7 +460,7 @@ public sealed class SharedWorldsService
 				error = e;
 			}
 		}) {
-			IsBackground = false,
+			IsBackground = true,
 			Name = "SharedWorlds Workshop Upload"
 		};
 
@@ -497,7 +512,7 @@ public sealed class SharedWorldsService
 				error = e;
 			}
 		}) {
-			IsBackground = false,
+			IsBackground = true,
 			Name = "SharedWorlds Pending Upload"
 		};
 
@@ -535,13 +550,10 @@ public sealed class SharedWorldsService
 		SharedWorldRecord? latest = Registry.FindByWorldId(record.WorldId) ?? record;
 
 		if (upload.Success) {
+			latest.PendingUpdatedUtc = DateTime.UtcNow;
 			if (latest.PendingVersion == version ||
 				string.Equals(latest.PendingHash, hash, StringComparison.OrdinalIgnoreCase)) {
-				latest.PendingUpload = false;
-				latest.PendingSnapshotDir = null;
-				latest.PendingVersion = 0;
-				latest.PendingHash = null;
-				latest.PendingNeedsEula = false;
+				ClearPending(latest);
 			}
 
 			LastStatus = $"Published '{latest.WorldName}' v{version} to Workshop.";
@@ -549,11 +561,7 @@ public sealed class SharedWorldsService
 		}
 		else if (latest.LocalVersion > version && latest.PendingVersion == version) {
 			// A newer local snapshot superseded this upload; it is queued separately.
-			latest.PendingUpload = false;
-			latest.PendingSnapshotDir = null;
-			latest.PendingVersion = 0;
-			latest.PendingHash = null;
-			latest.PendingNeedsEula = false;
+			ClearPending(latest);
 			LastStatus = $"Skipped Workshop upload of older v{version}; local v{latest.LocalVersion} is newer.";
 			Log.Info(LastStatus);
 		}
@@ -573,10 +581,8 @@ public sealed class SharedWorldsService
 		record.PendingVersion = version;
 		record.PendingHash = hash;
 		record.PendingNeedsEula = upload.NeedsEula;
+		record.PendingUpdatedUtc = DateTime.UtcNow;
 		LastStatus = "Snapshot saved locally; Workshop upload is pending. " + upload.Message;
-
-		if (upload.NeedsEula)
-			WorkshopService.ShowEula();
 
 		Log.Warn(LastStatus);
 	}
@@ -594,11 +600,7 @@ public sealed class SharedWorldsService
 
 		UploadResult result = await UploadSnapshotAsync(record, dir, manifest, progress, token).ConfigureAwait(false);
 		if (result.Success) {
-			record.PendingUpload = false;
-			record.PendingSnapshotDir = null;
-			record.PendingVersion = 0;
-			record.PendingHash = null;
-			record.PendingNeedsEula = false;
+			ClearPending(record);
 			Registry.Update(record);
 			Registry.Save();
 			Changed?.Invoke();
@@ -652,8 +654,6 @@ public sealed class SharedWorldsService
 			progress?.Report((0f, "Creating Workshop item"));
 			var create = await WorkshopService.CreateItemAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
 			if (!create.Success) {
-				if (create.NeedsEula)
-					WorkshopService.ShowEula();
 				return new UploadResult { Success = false, Pending = true, NeedsEula = create.NeedsEula, Message = create.Message };
 			}
 
@@ -667,8 +667,6 @@ public sealed class SharedWorldsService
 
 			// Continue into the upload even when the EULA is pending: the same update sets
 			// FriendsOnly visibility, so a newly created item is never left public.
-			if (create.NeedsEula)
-				WorkshopService.ShowEula();
 		}
 
 		manifest.Participants[ownId.ToString()] = record.WorkshopItemId;
@@ -707,13 +705,12 @@ public sealed class SharedWorldsService
 			progress).ConfigureAwait(false);
 
 		if (result.NeedsEula) {
-			WorkshopService.ShowEula();
 			return new UploadResult {
 				Success = false,
 				Pending = true,
 				NeedsEula = true,
 				ItemId = result.ItemId,
-				Message = "The snapshot uploaded, but Steam requires you to accept the Workshop Legal Agreement before friends can see the item. Accept it, then publish again."
+				Message = "The snapshot uploaded, but Steam requires you to accept the Workshop Legal Agreement before friends can see the item. Accept it in the Steam client, then publish again."
 			};
 		}
 
@@ -777,6 +774,13 @@ public sealed class SharedWorldsService
 
 			record.History = Registry.FindByWorldId(record.WorldId)?.History ?? record.History;
 			Log.Warn($"Local world '{record.WorldName}' changed outside the snapshot path; recorded it as local v{next}.");
+		}
+
+		if (record.PendingUpload &&
+			!string.Equals(record.PendingHash, hash, StringComparison.OrdinalIgnoreCase)) {
+			// The local head moved away from the pending snapshot; publishing it now
+			// would re-introduce an older branch.
+			ClearPending(record);
 		}
 
 		Registry.Update(record);
@@ -1109,6 +1113,10 @@ public sealed class SharedWorldsService
 			return report;
 		}
 
+		// The installed snapshot supersedes any pending local upload; keeping the old
+		// pending snapshot could re-publish the branch we just fast-forwarded away from.
+		ClearPending(record);
+
 		foreach (VersionRecord history in manifest.History)
 			Registry.RecordVersion(record.WorldId, history, Config.MaxHistoryEntries);
 
@@ -1178,6 +1186,8 @@ public sealed class SharedWorldsService
 		if (!SnapshotService.Install(record, download.InstallFolder, keepBackup: true, Config.MaxLocalBackups, out string message, allowDowngrade: true))
 			return (false, message);
 
+		ClearPending(record);
+
 		foreach (VersionRecord history in manifest.History)
 			Registry.RecordVersion(record.WorldId, history, Config.MaxHistoryEntries);
 
@@ -1243,6 +1253,18 @@ public sealed class SharedWorldsService
 		Changed?.Invoke();
 		LastStatus = $"Imported shared world '{record.WorldName}'. Download a snapshot before hosting.";
 		return record;
+	}
+
+	public void ClearPendingEula(string worldId)
+	{
+		SharedWorldRecord? record = Registry.FindByWorldId(worldId);
+		if (record == null || !record.PendingNeedsEula)
+			return;
+
+		record.PendingNeedsEula = false;
+		Registry.Update(record);
+		Registry.Save();
+		Changed?.Invoke();
 	}
 
 	public void NoteParticipant(string worldId, ulong steamId, ulong itemId)
@@ -1389,8 +1411,10 @@ public sealed class SharedWorldsService
 		sb.AppendLine($"This account's item: {(record.WorkshopItemId == 0 ? "not created" : record.WorkshopItemId.ToString())}");
 		sb.AppendLine($"Pending upload: {(record.PendingUpload ? "yes" : "no")}{(record.PendingNeedsEula ? " (Steam Workshop EULA not accepted)" : "")}");
 		sb.AppendLine($"Participants: {record.Participants.Count}");
-		foreach (KeyValuePair<string, ulong> p in record.Participants.OrderBy(p => p.Key))
+		foreach (KeyValuePair<string, ulong> p in record.Participants.OrderBy(p => p.Key).Take(8))
 			sb.AppendLine($"  {WorkshopService.PersonaName(ulong.TryParse(p.Key, out ulong id) ? id : 0)}: {p.Value}");
+		if (record.Participants.Count > 8)
+			sb.AppendLine($"  ... and {record.Participants.Count - 8} more");
 		return sb.ToString();
 	}
 }

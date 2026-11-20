@@ -212,6 +212,8 @@ public static class PeerTransferService
 			record.PendingSnapshotDir = publish ? Path.GetRelativePath(SharedWorldPaths.Root, built.SnapshotDir) : null;
 			record.PendingVersion = publish ? built.Version : 0;
 			record.PendingHash = publish ? built.ContentHash : null;
+			record.PendingNeedsEula = false;
+			record.PendingUpdatedUtc = DateTime.UtcNow;
 
 			SharedWorldsService.Instance.Registry.RecordVersion(record.WorldId, built.Manifest.AsVersionRecord, SharedWorldsConfig.Current.MaxHistoryEntries);
 			record.History = SharedWorldsService.Instance.Registry.FindByWorldId(record.WorldId)?.History ?? record.History;
@@ -233,6 +235,8 @@ public static class PeerTransferService
 								record.PendingSnapshotDir = null;
 								record.PendingVersion = 0;
 								record.PendingHash = null;
+								record.PendingNeedsEula = false;
+								record.PendingUpdatedUtc = DateTime.UtcNow;
 								SharedWorldsService.Instance.Registry.Update(record);
 								SharedWorldsService.Instance.Registry.Save();
 							}
@@ -240,6 +244,10 @@ public static class PeerTransferService
 							Main.QueueMainThreadAction(() => Main.NewText($"Published shared world v{manifest.Version} to Steam Workshop.", 160, 255, 180));
 						}
 						else {
+							record.PendingNeedsEula = result.NeedsEula;
+							record.PendingUpdatedUtc = DateTime.UtcNow;
+							SharedWorldsService.Instance.Registry.Update(record);
+							SharedWorldsService.Instance.Registry.Save();
 							Main.QueueMainThreadAction(() => Main.NewText("Workshop upload pending: " + result.Message, 255, 210, 140));
 							Log.Warn("Workshop upload pending: " + result.Message);
 						}

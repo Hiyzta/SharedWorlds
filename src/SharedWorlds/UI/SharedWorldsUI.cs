@@ -42,34 +42,47 @@ public sealed class SharedWorldsUIState : UIState
 
 	public override void OnInitialize()
 	{
+		float panelWidth = Math.Clamp(Main.screenWidth - 40, 640, 900);
+		float panelHeight = Math.Clamp(Main.screenHeight - 40, 520, 700);
+
 		var panel = new UIPanel {
-			Width = StyleDimension.FromPixels(760),
-			Height = StyleDimension.FromPixels(680),
+			Width = StyleDimension.FromPixels(panelWidth),
+			Height = StyleDimension.FromPixels(panelHeight),
 			HAlign = 0.5f,
 			VAlign = 0.5f,
-			BackgroundColor = new Color(16, 28, 42, 240)
+			BackgroundColor = new Color(13, 23, 36, 246),
+			BorderColor = new Color(52, 92, 112, 255)
 		};
 		Append(panel);
 
+		var header = new UIPanel {
+			Width = StyleDimension.FromPixelsAndPercent(0, 1f),
+			Height = StyleDimension.FromPixels(72),
+			BackgroundColor = new Color(22, 46, 64, 255),
+			BorderColor = new Color(52, 92, 112, 255)
+		};
+		panel.Append(header);
+
 		var title = new UIText("Shared Worlds", 1.15f, large: true) {
 			HAlign = 0.5f,
-			Top = StyleDimension.FromPixels(16)
+			Top = StyleDimension.FromPixels(8)
 		};
 		panel.Append(title);
 
-		var subtitle = new UIText("One world, one latest snapshot, any participant can host.", 0.75f) {
+		var subtitle = new UIText("One world · one latest snapshot · any participant can host", 0.68f) {
 			HAlign = 0.5f,
-			Top = StyleDimension.FromPixels(48),
-			TextColor = new Color(160, 200, 220)
+			Top = StyleDimension.FromPixels(44),
+			TextColor = new Color(120, 200, 214)
 		};
 		panel.Append(subtitle);
 
 		var listPanel = new UIPanel {
 			Left = StyleDimension.FromPixels(20),
 			Top = StyleDimension.FromPixels(82),
-			Width = StyleDimension.FromPixels(720),
-			Height = StyleDimension.FromPixels(468),
-			BackgroundColor = new Color(8, 18, 28, 220)
+			Width = StyleDimension.FromPixels(panelWidth - 40),
+			Height = StyleDimension.FromPixels(panelHeight - 212),
+			BackgroundColor = new Color(7, 14, 24, 220),
+			BorderColor = new Color(38, 70, 86, 255)
 		};
 		panel.Append(listPanel);
 
@@ -77,7 +90,8 @@ public sealed class SharedWorldsUIState : UIState
 			Left = StyleDimension.FromPixels(8),
 			Top = StyleDimension.FromPixels(8),
 			Width = StyleDimension.FromPixelsAndPercent(-34, 1f),
-			Height = StyleDimension.FromPixelsAndPercent(-16, 1f)
+			Height = StyleDimension.FromPixelsAndPercent(-16, 1f),
+			ListPadding = 6f
 		};
 		listPanel.Append(_list);
 
@@ -91,25 +105,64 @@ public sealed class SharedWorldsUIState : UIState
 		listPanel.Append(scrollbar);
 		_list.SetScrollbar(scrollbar);
 
-		_status = new UIText("", 0.72f) {
-			Left = StyleDimension.FromPixels(24),
-			Top = StyleDimension.FromPixels(558),
-			Width = StyleDimension.FromPixels(712),
-			Height = StyleDimension.FromPixels(48),
-			IsWrapped = true,
-			TextColor = new Color(180, 220, 235)
+		var statusPanel = new UIPanel {
+			Left = StyleDimension.FromPixels(20),
+			Top = StyleDimension.FromPixels(panelHeight - 124),
+			Width = StyleDimension.FromPixels(panelWidth - 40),
+			Height = StyleDimension.FromPixels(52),
+			BackgroundColor = new Color(8, 17, 27, 190),
+			BorderColor = new Color(38, 70, 86, 255)
 		};
-		panel.Append(_status);
+		panel.Append(statusPanel);
 
-		panel.Append(MakeButton("Refresh", 24, 622, 110, () => RefreshList()));
-		panel.Append(MakeButton("Register world", 144, 622, 150, OpenPicker));
-		panel.Append(MakeButton("Import invite", 304, 622, 140, OpenImport));
-		panel.Append(MakeButton("Back", 656, 622, 80, SharedWorldsUI.Close));
+		_status = new UIText("", 0.7f) {
+			Left = StyleDimension.FromPixels(10),
+			Top = StyleDimension.FromPixels(7),
+			Width = StyleDimension.FromPixels(panelWidth - 60),
+			Height = StyleDimension.FromPixels(38),
+			IsWrapped = true,
+			TextColor = new Color(190, 224, 234)
+		};
+		statusPanel.Append(_status);
+
+		float buttonTop = panelHeight - 58;
+		panel.Append(MakeButton("Refresh", 24, buttonTop, 110, () => RefreshList()));
+		panel.Append(MakeButton("Register world", 144, buttonTop, 150, OpenPicker));
+		panel.Append(MakeButton("Import invite", 304, buttonTop, 140, OpenImport));
+		panel.Append(MakeButton("Back", panelWidth - 104, buttonTop, 80, SharedWorldsUI.Close));
 	}
 
 	public override void OnActivate()
 	{
+		SharedWorldsService.Instance.Changed -= OnServiceChanged;
+		SharedWorldsService.Instance.Changed += OnServiceChanged;
 		RefreshList();
+
+		SharedWorldRecord? pendingEula = _records.FirstOrDefault(r => r.PendingNeedsEula);
+		if (pendingEula == null)
+			return;
+
+		_ = Task.Run(async () => {
+			WorkshopService.EulaState state = await WorkshopService.CheckEulaAsync(TimeSpan.FromSeconds(10));
+			if (state != WorkshopService.EulaState.Accepted)
+				return;
+
+			SharedWorldsService.Instance.ClearPendingEula(pendingEula.WorldId);
+			Main.QueueMainThreadAction(() => {
+				_status.SetText("Steam Workshop EULA is accepted. Use Publish pending when ready.");
+				RefreshList();
+			});
+		});
+	}
+
+	public override void OnDeactivate()
+	{
+		SharedWorldsService.Instance.Changed -= OnServiceChanged;
+	}
+
+	private void OnServiceChanged()
+	{
+		Main.QueueMainThreadAction(RefreshList);
 	}
 
 	public override void Update(GameTime gameTime)
@@ -289,44 +342,64 @@ public sealed class SharedWorldEntryElement : UIPanel
 		_owner = owner;
 
 		Width = StyleDimension.FromPixelsAndPercent(-8, 1f);
-		Height = StyleDimension.FromPixels(96);
-		BackgroundColor = new Color(18, 38, 54, 235);
-		BorderColor = new Color(50, 90, 110, 255);
+		Height = StyleDimension.FromPixels(104);
+		BackgroundColor = record.PendingUpload
+			? new Color(25, 40, 48, 238)
+			: new Color(16, 33, 47, 238);
+		BorderColor = record.PendingUpload
+			? new Color(92, 78, 42, 255)
+			: new Color(44, 82, 100, 255);
 
-		var name = new UIText(record.WorldName, 0.9f) {
+		var name = new UIText(record.WorldName, 0.92f) {
 			Left = StyleDimension.FromPixels(14),
 			Top = StyleDimension.FromPixels(8),
-			Width = StyleDimension.FromPixels(360)
+			Width = StyleDimension.FromPixelsAndPercent(-330, 1f)
 		};
 		Append(name);
 
 		string host = WorkshopService.PersonaName(record.LastHostSteamId);
-		string version = record.LocalVersion == 0 ? "no local snapshot" : $"v{record.LocalVersion} {HashUtil.Short(record.LocalHash)}";
-		string pending = record.PendingUpload
-			? (record.PendingNeedsEula ? "  |  EULA needed" : "  |  upload pending")
-			: "";
-		var detail = new UIText($"{version}  |  last host: {host}  |  item: {(record.WorkshopItemId == 0 ? "not created" : record.WorkshopItemId.ToString())}{pending}", 0.68f) {
+		string version = record.LocalVersion == 0
+			? "no local snapshot"
+			: $"v{record.LocalVersion} · {HashUtil.Short(record.LocalHash)}";
+		var versionText = new UIText($"{version}  ·  last host: {host}", 0.66f) {
 			Left = StyleDimension.FromPixels(14),
-			Top = StyleDimension.FromPixels(38),
-			Width = StyleDimension.FromPixels(370),
-			TextColor = record.PendingUpload ? new Color(245, 200, 120) : new Color(160, 200, 215)
+			Top = StyleDimension.FromPixels(36),
+			Width = StyleDimension.FromPixelsAndPercent(-330, 1f),
+			TextColor = new Color(160, 202, 216)
 		};
-		Append(detail);
+		Append(versionText);
 
-		var hint = new UIText(record.Participants.Count == 0 ? "Only this account so far" : $"{record.Participants.Count} participant account(s)", 0.62f) {
+		string item = record.WorkshopItemId == 0 ? "item not created yet" : "item " + record.WorkshopItemId;
+		string status = record.PendingUpload
+			? (record.PendingNeedsEula ? "EULA needed" : "upload pending")
+			: "synced";
+		var itemText = new UIText($"{item}  ·  {status}", 0.62f) {
 			Left = StyleDimension.FromPixels(14),
-			Top = StyleDimension.FromPixels(64),
-			TextColor = new Color(130, 165, 180)
+			Top = StyleDimension.FromPixels(57),
+			Width = StyleDimension.FromPixelsAndPercent(-330, 1f),
+			TextColor = record.PendingUpload ? new Color(240, 198, 118) : new Color(128, 170, 184)
+		};
+		Append(itemText);
+
+		var hint = new UIText(
+			record.Participants.Count == 0
+				? "Only this account so far"
+				: $"{record.Participants.Count} participant account(s)  ·  {record.History.Count} known version(s)",
+			0.58f) {
+			Left = StyleDimension.FromPixels(14),
+			Top = StyleDimension.FromPixels(78),
+			Width = StyleDimension.FromPixelsAndPercent(-330, 1f),
+			TextColor = new Color(110, 145, 160)
 		};
 		Append(hint);
 
-		Append(MakeSmallButton("Host", 380, 8, () => _owner.BeginSync(_record, hostAfter: true)));
-		Append(MakeSmallButton("Sync", 478, 8, () => _owner.BeginSync(_record, hostAfter: false)));
-		Append(MakeSmallButton("Invite", 576, 8, () => _owner.CopyInvite(_record)));
-		Append(MakeSmallButton("Info", 478, 50, () => _owner.OpenDetail(_record)));
+		Append(MakeSmallButton("Host", -300, 12, () => _owner.BeginSync(_record, hostAfter: true), hAlign: 1f));
+		Append(MakeSmallButton("Sync", -204, 12, () => _owner.BeginSync(_record, hostAfter: false), hAlign: 1f));
+		Append(MakeSmallButton("Invite", -108, 12, () => _owner.CopyInvite(_record), hAlign: 1f));
+		Append(MakeSmallButton("Info", -204, 56, () => _owner.OpenDetail(_record), hAlign: 1f));
 	}
 
-	private UITextPanel<string> MakeSmallButton(string text, float left, float top, Action onClick)
+	private UITextPanel<string> MakeSmallButton(string text, float left, float top, Action onClick, float hAlign = 0f)
 	{
 		var button = new UITextPanel<string>(text, 0.62f) {
 			Left = StyleDimension.FromPixels(left),
@@ -334,6 +407,8 @@ public sealed class SharedWorldEntryElement : UIPanel
 			Width = StyleDimension.FromPixels(88),
 			Height = StyleDimension.FromPixels(30)
 		};
+		if (hAlign != 0f)
+			button.HAlign = hAlign;
 		button.OnLeftClick += (_, _) => {
 			SoundEngine.PlaySound(SoundID.MenuTick);
 			onClick();
@@ -345,7 +420,7 @@ public sealed class SharedWorldEntryElement : UIPanel
 public sealed class SharedWorldPickerUIState : UIState
 {
 	private readonly SharedWorldsUIState _parent;
-	private readonly UIList _list = new();
+	private readonly UIList _list = new() { ListPadding = 6f };
 
 	public SharedWorldPickerUIState(SharedWorldsUIState parent)
 	{
@@ -354,33 +429,54 @@ public sealed class SharedWorldPickerUIState : UIState
 
 	public override void OnInitialize()
 	{
+		float panelWidth = Math.Clamp(Main.screenWidth - 40, 640, 760);
+		float panelHeight = Math.Clamp(Main.screenHeight - 40, 420, 560);
+
 		var panel = new UIPanel {
-			Width = StyleDimension.FromPixels(760),
-			Height = StyleDimension.FromPixels(560),
+			Width = StyleDimension.FromPixels(panelWidth),
+			Height = StyleDimension.FromPixels(panelHeight),
 			HAlign = 0.5f,
 			VAlign = 0.5f,
-			BackgroundColor = new Color(16, 28, 42, 245)
+			BackgroundColor = new Color(13, 23, 36, 246),
+			BorderColor = new Color(52, 92, 112, 255)
 		};
 		Append(panel);
 
-		panel.Append(new UIText("Register a local world", 1f, large: true) {
-			HAlign = 0.5f,
-			Top = StyleDimension.FromPixels(16)
+		panel.Append(new UIPanel {
+			Width = StyleDimension.FromPixelsAndPercent(0, 1f),
+			Height = StyleDimension.FromPixels(72),
+			BackgroundColor = new Color(22, 46, 64, 255),
+			BorderColor = new Color(52, 92, 112, 255)
 		});
 
-		panel.Append(new UIText("Steam Cloud worlds are not supported yet; move the world to local storage first.", 0.65f) {
+		panel.Append(new UIText("Register a local world", 1f, large: true) {
 			HAlign = 0.5f,
-			Top = StyleDimension.FromPixels(50),
-			TextColor = new Color(160, 190, 205)
+			Top = StyleDimension.FromPixels(10)
+		});
+
+		panel.Append(new UIText("Steam Cloud worlds are not supported yet; move the world to local storage first.", 0.62f) {
+			HAlign = 0.5f,
+			Top = StyleDimension.FromPixels(44),
+			TextColor = new Color(140, 190, 204)
 		});
 
 		_list.Left = StyleDimension.FromPixels(20);
-		_list.Top = StyleDimension.FromPixels(88);
-		_list.Width = StyleDimension.FromPixels(720);
-		_list.Height = StyleDimension.FromPixels(380);
+		_list.Top = StyleDimension.FromPixels(86);
+		_list.Width = StyleDimension.FromPixels(panelWidth - 62);
+		_list.Height = StyleDimension.FromPixels(panelHeight - 150);
 		panel.Append(_list);
 
-		panel.Append(SharedWorldsUIState.MakeButton("Back", 640, 500, 100, GoBack));
+		var scrollbar = new UIScrollbar {
+			HAlign = 1f,
+			Width = StyleDimension.FromPixels(20),
+			Height = StyleDimension.FromPixels(panelHeight - 150),
+			Top = StyleDimension.FromPixels(86)
+		};
+		scrollbar.SetView(100f, 1000f);
+		panel.Append(scrollbar);
+		_list.SetScrollbar(scrollbar);
+
+		panel.Append(SharedWorldsUIState.MakeButton("Back", panelWidth - 120, panelHeight - 58, 100, GoBack));
 
 		foreach (WorldFileData world in Main.WorldList.Where(w => w.IsValid).OrderBy(w => w.Name)) {
 			bool registered = SharedWorldsService.Instance.FindByFileName(Path.GetFileName(world.Path)) != null;
@@ -390,7 +486,10 @@ public sealed class SharedWorldPickerUIState : UIState
 
 			var button = new UITextPanel<string>(world.Name + suffix, 0.72f) {
 				Width = StyleDimension.FromPixelsAndPercent(-8, 1f),
-				Height = StyleDimension.FromPixels(44)
+				Height = StyleDimension.FromPixels(44),
+				BackgroundColor = registered || world.IsCloudSave
+					? new Color(28, 34, 44, 220)
+					: new Color(24, 52, 70, 235)
 			};
 
 			if (!registered && !world.IsCloudSave) {
@@ -439,34 +538,54 @@ public sealed class SharedWorldDetailUIState : UIState
 
 	public override void OnInitialize()
 	{
+		float panelWidth = Math.Clamp(Main.screenWidth - 40, 700, 900);
+		float panelHeight = Math.Clamp(Main.screenHeight - 40, 520, 700);
+
 		var panel = new UIPanel {
-			Width = StyleDimension.FromPixels(760),
-			Height = StyleDimension.FromPixels(680),
+			Width = StyleDimension.FromPixels(panelWidth),
+			Height = StyleDimension.FromPixels(panelHeight),
 			HAlign = 0.5f,
 			VAlign = 0.5f,
-			BackgroundColor = new Color(16, 28, 42, 245)
+			BackgroundColor = new Color(13, 23, 36, 246),
+			BorderColor = new Color(52, 92, 112, 255)
 		};
 		Append(panel);
 
+		panel.Append(new UIPanel {
+			Width = StyleDimension.FromPixelsAndPercent(0, 1f),
+			Height = StyleDimension.FromPixels(76),
+			BackgroundColor = new Color(22, 46, 64, 255),
+			BorderColor = new Color(52, 92, 112, 255)
+		});
+
 		panel.Append(new UIText(_record.WorldName, 1f, large: true) {
 			HAlign = 0.5f,
-			Top = StyleDimension.FromPixels(16)
+			Top = StyleDimension.FromPixels(8)
+		});
+
+		panel.Append(new UIText("World ID " + HashUtil.Short(_record.WorldId, 18), 0.6f) {
+			HAlign = 0.5f,
+			Top = StyleDimension.FromPixels(46),
+			TextColor = new Color(132, 176, 190)
 		});
 
 		_text.Left = StyleDimension.FromPixels(24);
-		_text.Top = StyleDimension.FromPixels(64);
-		_text.Width = StyleDimension.FromPixels(712);
-		_text.Height = StyleDimension.FromPixels(470);
+		_text.Top = StyleDimension.FromPixels(88);
+		_text.Width = StyleDimension.FromPixels(panelWidth - 48);
+		_text.Height = StyleDimension.FromPixels(panelHeight - 250);
 		_text.TextColor = new Color(185, 215, 230);
 		_text.SetText(SharedWorldsService.Instance.DescribeRecord(_record) + DescribeFork() + DescribeHistory());
 		panel.Append(_text);
 
-		panel.Append(SharedWorldsUIState.MakeButton("Copy invite", 24, 552, 130, () => {
+		float firstRow = panelHeight - 142;
+		float secondRow = panelHeight - 84;
+
+		panel.Append(SharedWorldsUIState.MakeButton("Copy invite", 24, firstRow, 130, () => {
 			_parent.CopyInvite(_record);
 			_parent.ShowStatus("Invite copied (if this world has a Workshop item).");
 		}));
 
-		panel.Append(SharedWorldsUIState.MakeButton("Publish pending", 164, 552, 150, () => {
+		panel.Append(SharedWorldsUIState.MakeButton("Publish pending", 164, firstRow, 150, () => {
 			if (!_record.PendingUpload) {
 				_parent.ShowStatus("There is no pending snapshot for this world.");
 				return;
@@ -485,7 +604,7 @@ public sealed class SharedWorldDetailUIState : UIState
 			});
 		}));
 
-		panel.Append(SharedWorldsUIState.MakeButton("Open backups", 324, 552, 140, () => {
+		panel.Append(SharedWorldsUIState.MakeButton("Open backups", 324, firstRow, 140, () => {
 			string dir = Path.Combine(SharedWorldPaths.BackupsRoot, _record.WorldId);
 			if (Directory.Exists(dir))
 				Utils.OpenFolder(dir);
@@ -493,38 +612,43 @@ public sealed class SharedWorldDetailUIState : UIState
 				_parent.ShowStatus("No local backups for this world yet.");
 		}));
 
-		if (_record.PendingNeedsEula) {
-			panel.Append(SharedWorldsUIState.MakeButton("Accept Workshop EULA", 24, 604, 200, () => {
-				WorkshopService.ShowEula();
-				_parent.ShowStatus("Accept the Steam Workshop Legal Agreement in the overlay, then click Publish pending.");
-			}));
-		}
-
-		SyncReport? fork = _parent.LastSyncReport;
-		if (fork?.Status == SyncStatus.Fork &&
-			fork.BestRemote != null &&
-			ulong.TryParse(fork.BestRemote.SourceItemId, out ulong remoteItemId) &&
-			remoteItemId != 0) {
-			panel.Append(SharedWorldsUIState.MakeButton($"Use remote v{fork.BestRemote.Version}", 484, 552, 190, () => ResolveWithRemote(remoteItemId, fork.BestRemote.Version)));
-		}
-
-		panel.Append(SharedWorldsUIState.MakeButton("Back", 656, 552, 80, () => {
+		panel.Append(SharedWorldsUIState.MakeButton("Back", panelWidth - 104, firstRow, 80, () => {
 			SoundEngine.PlaySound(SoundID.MenuClose);
 			Main.MenuUI.SetState(_parent);
 			Main.menuMode = 888;
 		}));
+
+		SyncReport? fork = _parent.LastSyncReport;
+		if (fork?.Status == SyncStatus.Fork) {
+			List<VersionRecord> remotes = fork.ForkHeads
+				.Where(h => !string.Equals(h.Hash, _record.LocalHash, StringComparison.OrdinalIgnoreCase))
+				.Where(h => ulong.TryParse(h.SourceItemId, out _))
+				.Take(3)
+				.ToList();
+
+			for (int i = 0; i < remotes.Count; i++) {
+				VersionRecord head = remotes[i];
+				ulong itemId = ulong.Parse(head.SourceItemId!);
+				float left = 24 + i * 208;
+				panel.Append(SharedWorldsUIState.MakeButton(
+					$"Use v{head.Version} {HashUtil.Short(head.Hash, 6)}",
+					left, secondRow, 196,
+					() => ResolveWithRemote(itemId, head.Version)));
+			}
+		}
 	}
 
-	private bool _confirmRemote;
+	private ulong _pendingRemoteItemId;
 
 	private void ResolveWithRemote(ulong itemId, int version)
 	{
-		if (!_confirmRemote) {
-			_confirmRemote = true;
-			_parent.ShowStatus($"Click 'Use remote v{version}' again to confirm. The local branch will be backed up first.");
+		if (_pendingRemoteItemId != itemId) {
+			_pendingRemoteItemId = itemId;
+			_parent.ShowStatus($"Click the same 'Use v{version}' button again to confirm. The local branch will be backed up first.");
 			return;
 		}
 
+		_pendingRemoteItemId = 0;
 		_parent.ShowStatus($"Installing remote v{version}...");
 		_ = Task.Run(async () => {
 			(bool success, string message) = await SharedWorldsService.Instance.InstallRemoteSnapshotAsync(_record, itemId, null, CancellationToken.None);
@@ -547,7 +671,7 @@ public sealed class SharedWorldDetailUIState : UIState
 			sb.AppendLine($"  v{head.Version}  {HashUtil.Short(head.Hash)}  host {WorkshopService.PersonaName(head.HostSteamId)}  item {head.SourceItemId ?? "?"}");
 		}
 
-		sb.AppendLine("Nothing has been overwritten. Use 'Use remote' below, or keep the local version and let the other branch stay in backups.");
+		sb.AppendLine("Nothing has been overwritten. Use one of the version buttons below to install that branch (it will be backed up), or Back to keep the local version.");
 		return sb.ToString();
 	}
 
@@ -557,12 +681,12 @@ public sealed class SharedWorldDetailUIState : UIState
 			return "\n\nNo version history recorded yet.";
 
 		var sb = new System.Text.StringBuilder("\n\nVersion history (newest first):\n");
-		foreach (VersionRecord version in _record.History.OrderByDescending(v => v.Version).Take(12)) {
+		foreach (VersionRecord version in _record.History.OrderByDescending(v => v.Version).Take(8)) {
 			sb.AppendLine($"  v{version.Version}  {HashUtil.Short(version.Hash)}  parent {HashUtil.Short(version.ParentHash)}  host {WorkshopService.PersonaName(version.HostSteamId)}  {version.TimestampUtc:yyyy-MM-dd HH:mm} UTC");
 		}
 
-		if (_record.History.Count > 12)
-			sb.AppendLine($"  ... and {_record.History.Count - 12} older record(s)");
+		if (_record.History.Count > 8)
+			sb.AppendLine($"  ... and {_record.History.Count - 8} older record(s)");
 
 		return sb.ToString();
 	}
