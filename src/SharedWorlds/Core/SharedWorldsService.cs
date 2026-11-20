@@ -302,6 +302,12 @@ public sealed class SharedWorldsService
 
 	private void PublishWorld(SharedWorldRecord record, string worldPath, string twldPath, string parentHash, int startVersion)
 	{
+		lock (_autoSaveLock)
+			PublishWorldCore(record, worldPath, twldPath, parentHash, startVersion);
+	}
+
+	private void PublishWorldCore(SharedWorldRecord record, string worldPath, string twldPath, string parentHash, int startVersion)
+	{
 		try {
 			ulong hostId = WorkshopService.CurrentSteamId;
 			if (hostId == 0)
@@ -1476,6 +1482,10 @@ public sealed class SharedWorldsService
 				hostId = record.LastHostSteamId;
 
 			SnapshotBuildResult built;
+			bool upload;
+
+			// Build and record the local head under the same lock used by the exit path.
+			// An exit snapshot must never race an autosave and produce two siblings.
 			lock (_autoSaveLock) {
 				built = SnapshotService.Build(
 					record,
@@ -1487,51 +1497,51 @@ public sealed class SharedWorldsService
 					record.LocalVersion > 0 ? record.LocalHash : "",
 					record.HighestKnownVersion + 1,
 					Config.MaxHistoryEntries);
-			}
 
-			if (!built.Success) {
-				Log.Warn("Autosave snapshot failed: " + built.Message);
-				return;
-			}
-
-			if (built.Unchanged) {
-				Log.Info("Autosave snapshot is unchanged; no Workshop update needed.");
-				if (record.PendingUpload && record.WorkshopStorageEnabled && WorkshopService.IsAvailable) {
-					_ = Task.Run(async () => {
-						try {
-							UploadResult retry = await RetryPendingAsync(record, null, CancellationToken.None).ConfigureAwait(false);
-							Main.QueueMainThreadAction(() => {
-								LastStatus = retry.Success
-									? "Published the pending snapshot to Workshop."
-									: "Pending snapshot is still waiting: " + retry.Message;
-								Changed?.Invoke();
-							});
-						}
-						catch (Exception e) {
-							Log.Warn("Could not retry the pending Workshop upload after an unchanged autosave.", e);
-						}
-					});
+				if (!built.Success) {
+					Log.Warn("Autosave snapshot failed: " + built.Message);
+					return;
 				}
-				return;
+
+				if (built.Unchanged) {
+					Log.Info("Autosave snapshot is unchanged; no Workshop update needed.");
+					if (record.PendingUpload && record.WorkshopStorageEnabled && WorkshopService.IsAvailable) {
+						_ = Task.Run(async () => {
+							try {
+								UploadResult retry = await RetryPendingAsync(record, null, CancellationToken.None).ConfigureAwait(false);
+								Main.QueueMainThreadAction(() => {
+									LastStatus = retry.Success
+										? "Published the pending snapshot to Workshop."
+										: "Pending snapshot is still waiting: " + retry.Message;
+									Changed?.Invoke();
+								});
+							}
+							catch (Exception e) {
+								Log.Warn("Could not retry the pending Workshop upload after an unchanged autosave.", e);
+							}
+						});
+					}
+					return;
+				}
+
+				record.LocalVersion = built.Version;
+				record.LocalHash = built.ContentHash;
+				record.LastParentHash = built.Manifest!.ParentHash;
+				record.LastHostSteamId = hostId;
+				record.LastUpdatedUtc = built.Manifest.TimestampUtc;
+				record.Mods = GetCurrentMods();
+				Registry.RecordVersion(record.WorldId, built.Manifest.AsVersionRecord, Config.MaxHistoryEntries);
+				record.History = Registry.FindByWorldId(record.WorldId)?.History ?? record.History;
+
+				upload = record.WorkshopStorageEnabled && WorkshopService.IsAvailable;
+				if (upload)
+					QueuePending(record, built.SnapshotDir, built.Version, built.ContentHash);
+
+				Registry.Update(record);
+				Registry.Save();
+				SnapshotService.PruneSnapshots(record.WorldId, Math.Max(3, Config.MaxLocalBackups / 2), built.SnapshotDir);
+				Changed?.Invoke();
 			}
-
-			record.LocalVersion = built.Version;
-			record.LocalHash = built.ContentHash;
-			record.LastParentHash = built.Manifest!.ParentHash;
-			record.LastHostSteamId = hostId;
-			record.LastUpdatedUtc = built.Manifest.TimestampUtc;
-			record.Mods = GetCurrentMods();
-			Registry.RecordVersion(record.WorldId, built.Manifest.AsVersionRecord, Config.MaxHistoryEntries);
-			record.History = Registry.FindByWorldId(record.WorldId)?.History ?? record.History;
-
-			bool upload = record.WorkshopStorageEnabled && WorkshopService.IsAvailable;
-			if (upload)
-				QueuePending(record, built.SnapshotDir, built.Version, built.ContentHash);
-
-			Registry.Update(record);
-			Registry.Save();
-			SnapshotService.PruneSnapshots(record.WorldId, Math.Max(3, Config.MaxLocalBackups / 2), built.SnapshotDir);
-			Changed?.Invoke();
 
 			if (Main.netMode == NetmodeID.Server) {
 				SharedWorldRecord broadcastRecord = Registry.FindByWorldId(record.WorldId) ?? record;
