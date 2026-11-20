@@ -2,6 +2,12 @@
 
 All notable changes to Shared Worlds are documented here. The format follows Keep a Changelog; versions use SemVer.
 
+## [0.1.4] - 2026-11-20
+
+### Fixed
+
+- World-row action buttons (`Host`, `Sync`, `Invite`, `Info`) now use explicit right-aligned positions derived from the window width. The previous `HAlign` offsets could overlap the row text at 800x600.
+
 ## [0.1.3] - 2026-11-20
 
 ### Changed

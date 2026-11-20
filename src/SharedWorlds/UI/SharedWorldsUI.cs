@@ -340,6 +340,7 @@ public sealed class SharedWorldEntryElement : UIPanel
 	{
 		_record = record;
 		_owner = owner;
+		float entryWidth = Math.Clamp(Main.screenWidth - 40, 640, 900) - 82;
 
 		Width = StyleDimension.FromPixelsAndPercent(-8, 1f);
 		Height = StyleDimension.FromPixels(104);
@@ -393,13 +394,13 @@ public sealed class SharedWorldEntryElement : UIPanel
 		};
 		Append(hint);
 
-		Append(MakeSmallButton("Host", -300, 12, () => _owner.BeginSync(_record, hostAfter: true), hAlign: 1f));
-		Append(MakeSmallButton("Sync", -204, 12, () => _owner.BeginSync(_record, hostAfter: false), hAlign: 1f));
-		Append(MakeSmallButton("Invite", -108, 12, () => _owner.CopyInvite(_record), hAlign: 1f));
-		Append(MakeSmallButton("Info", -204, 56, () => _owner.OpenDetail(_record), hAlign: 1f));
+		Append(MakeSmallButton("Host", entryWidth - 300, 12, () => _owner.BeginSync(_record, hostAfter: true)));
+		Append(MakeSmallButton("Sync", entryWidth - 204, 12, () => _owner.BeginSync(_record, hostAfter: false)));
+		Append(MakeSmallButton("Invite", entryWidth - 108, 12, () => _owner.CopyInvite(_record)));
+		Append(MakeSmallButton("Info", entryWidth - 204, 56, () => _owner.OpenDetail(_record)));
 	}
 
-	private UITextPanel<string> MakeSmallButton(string text, float left, float top, Action onClick, float hAlign = 0f)
+	private UITextPanel<string> MakeSmallButton(string text, float left, float top, Action onClick)
 	{
 		var button = new UITextPanel<string>(text, 0.62f) {
 			Left = StyleDimension.FromPixels(left),
@@ -407,8 +408,6 @@ public sealed class SharedWorldEntryElement : UIPanel
 			Width = StyleDimension.FromPixels(88),
 			Height = StyleDimension.FromPixels(30)
 		};
-		if (hAlign != 0f)
-			button.HAlign = hAlign;
 		button.OnLeftClick += (_, _) => {
 			SoundEngine.PlaySound(SoundID.MenuTick);
 			onClick();
