@@ -2,7 +2,7 @@
 
 All notable changes to Shared Worlds are documented here. The format follows Keep a Changelog; versions use SemVer.
 
-## [0.2.0] - 2026-11-20
+## [0.2.0] - 2026-11-21
 
 ### Added
 
