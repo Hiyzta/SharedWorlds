@@ -6,12 +6,12 @@ Features:
 - Real "Play Shared Worlds" row in the multiplayer menu
 - Clean Play screen with live host/player count, last-saved timestamps and sync state
 - Join an online shared world, or host the latest saved snapshot
+- Shared worlds are kept on the hosted path: opening one in single-player is rejected the same way vanilla blocks Journey-mode mismatches
 - Configurable 10-minute Shared Worlds autosave upload while hosting
 - Host-left prompt with a rehost election and automatic rejoin
 - Per-account Workshop storage (friends-only)
 - Timestamped snapshot history, hash verification and local backups
 - Fork detection instead of silent overwrites
 - Peer-to-peer snapshot transfer during a session
-- "Open to friends" Host & Play launcher
 
 The original creator is not special: anyone in the group can host and make progress.

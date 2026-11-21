@@ -102,7 +102,7 @@ Bob ── sync / download ─────────────────�
         <li><strong>Join or host</strong> from any account. Join a live Host &amp; Play lobby, or host the latest verified snapshot.</li>
         <li><strong>10-minute autosave uploads</strong> while live, always to the same per-account Workshop item.</li>
         <li><strong>Host-left recovery</strong>: an ordered rehost offer, a handoff marker, and automatic follow-up join.</li>
-        <li><strong>Open to friends</strong>: in-game panel → save → title → Host &amp; Play with friends-only lobby visibility.</li>
+        <li><strong>Solo or with friends</strong>: hosting runs a local server your friends can drop into at any time; the vanilla single-player list dimms shared worlds and explains where to play them instead.</li>
         <li><strong>Fork detection</strong> with an explicit choice for each remote head; the losing branch stays backed up.</li>
         <li><strong>Peer transfer</strong> in 16 KB verified chunks during a session.</li>
         <li><strong>Timestamp-first UI</strong> with host, item, participant, pending/EULA status and local backups.</li>
@@ -189,7 +189,7 @@ dotnet build -c Release</code></pre>
         <li><strong>Friendship is access.</strong> Friends-only items cannot be read by non-friends. Losing a friendship loses that account's latest snapshot.</li>
         <li><strong>Propagation delay.</strong> A fresh upload can take a short while to become visible to other accounts. The mod retries and never installs unverified content.</li>
         <li><strong>Private is owner-only.</strong> A private item cannot be the shared storage primitive; friends-only is the correct setting.</li>
-        <li><strong>No live conversion.</strong> “Open to friends” saves, returns to the title screen, and relaunches Host &amp; Play.</li>
+        <li><strong>Single-player is blocked for shared worlds.</strong> The row is dimmed like a Journey-mode mismatch and clicking Play opens vanilla's rejection menu, keeping one hosted writer at a time.</li>
         <li><strong>Host recovery is a reconnect.</strong> Clients disconnect, one account rehosts, and the others follow the new Steam lobby. A crash before the last autosave can lose a few minutes.</li>
         <li><strong>Live discovery is friends-only.</strong> Rich Presence is visible to Steam friends; a non-friend may miss the new lobby and fall back to the Workshop snapshot.</li>
         <li><strong>Peer transfer is best-effort.</strong> It does not trap the host until every client ACKs; the Workshop snapshot is the durability guarantee.</li>

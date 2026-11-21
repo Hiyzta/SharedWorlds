@@ -14,6 +14,7 @@ Status legend:
 |---|---|---|
 | Crash/power loss before an autosave | Not fixable | Progress since the last autosave/upload is lost. The last successful snapshot remains; the next normal save/exit publishes a new one. |
 | Crash/power loss before save/unload | Not fixable | No exit snapshot from that session. With live autosave enabled, the last 10-minute snapshot is still on the same Workshop item; otherwise the next load records the on-disk autosave as a local head. |
+| Shared world opened from the vanilla single-player list | Prevented | The row is dimmed like a Journey-mode mismatch and clicking Play opens vanilla's rejection menu pointing at Play Shared Worlds. Host & Play and dedicated servers stay allowed. |
 | Autosave fires while an earlier upload is still running | Prevented | Uploads are serialized. The older upload is skipped if the local head has advanced, so the item cannot move backwards. |
 | Autosave save fails or Steam is offline | Mitigated | The snapshot is marked pending and retried. The world keeps playing; the UI shows the pending state. |
 | Host force-killed or server not shut down gracefully | Not fixable | No `OnWorldUnload`, no upload. The last published version remains; local files and backups are unaffected. |
@@ -63,7 +64,7 @@ Status legend:
 | Interrupted install | Prevented | Files are copied to temp, hash-verified, then atomically moved; failure restores the backup. |
 | Different mods on different machines | Mitigated | Hashes differ and tModLoader blocks joining; the mod records the mod list in the manifest. |
 | Dedicated server without a Steam client | Mitigated | No Workshop upload; snapshot stays local/pending. Host & Play is the supported path. |
-| "Open to friends" transition | Mitigated | The single-player unload defers to the Host & Play server's shutdown upload. If the server fails to start, the save waits for the next normal save/unload. |
+| "Open to friends" transition | Mitigated | The single-player unload defers to the Host & Play server's shutdown upload. If the server fails to start, the save waits for the next normal save/unload. (With the single-player guard in place this transition is no longer reachable for registered worlds; the row is kept for the pre-guard upgrade path.) |
 | Private Host & Play API changes | Mitigated | Reflection is isolated; failure falls back to the normal Host & Play screen. |
 | Main menu hook availability | Prevented | Menu work uses `PostUpdateInput`; the button attaches to the active ModMenu UI and F9 is a fallback. |
 | Multiplayer-menu IL hook fails after a tModLoader update | Mitigated | The hook is anchored to `menuMode == 12` and wrapped in try/catch. The setup screen and its **Play** button remain available. |

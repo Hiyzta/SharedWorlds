@@ -41,7 +41,7 @@ Each Steam account gets **its own friends-only Workshop item per shared world**.
 
 ```mermaid
 flowchart LR
-    A["Alice<br/>single-player or host"] -->|autosave or exit| S["Snapshot<br/>world.wld + world.twld + manifest.json"]
+    A["Alice<br/>hosts (solo or with friends)"] -->|autosave or exit| S["Snapshot<br/>world.wld + world.twld + manifest.json"]
     S -->|upload| AW["Alice's Workshop item<br/>FriendsOnly"]
     B["Bob<br/>wants to host"] -->|query metadata| AW
     B -->|newer? download + verify| S
@@ -98,14 +98,15 @@ Workshop item **metadata** (max 5000 bytes) stores a compact copy of the version
 
 The snapshot is built on the **authoritative side**, after Terraria has saved the world:
 
-- **Every Shared Worlds autosave** (default 10 minutes) while single-player or the Host & Play server is live. The same per-account Workshop item is updated, never duplicated.
-- Save & exit in single-player.
+- **Every Shared Worlds autosave** (default 10 minutes) while a Host & Play server is live. The same per-account Workshop item is updated, never duplicated.
 - The Host & Play server shutting down after its last player leaves.
 - A Steam-enabled server process saving and exiting.
 
+Registered shared worlds **cannot be opened from the vanilla single-player world list**: the row is dimmed like a Journey-mode mismatch and clicking Play opens the same rejection menu, pointing at the Play Shared Worlds screen. One hosted session at a time is how the mod guarantees a single writer and prevents silent offline forks.
+
 On world load, the mod only hashes the world and checks metadata; a newer remote snapshot produces a warning, not an automatic swap. A multiplayer client never builds an authoritative snapshot, but it receives the host's live autosave through peer transfer so it can take over immediately.
 
-If upload is enabled, the registry is marked **pending first**, then the snapshot is updated on **this account's own item**. Single-player uploads run in the background while the menu pumps Steam callbacks; a server shutdown waits with a callback-pumping helper thread. If the process exits or Steam is offline, the pending snapshot is retried on the next save/unload, the next autosave, or from **Publish pending**.
+If upload is enabled, the registry is marked **pending first**, then the snapshot is updated on **this account's own item**. The exit upload runs while the menu pumps Steam callbacks; a server shutdown waits with a callback-pumping helper thread. If the process exits or Steam is offline, the pending snapshot is retried on the next save/unload, the next autosave, or from **Publish pending**.
 
 ### What can go wrong
 
@@ -179,10 +180,7 @@ The Play screen is backed by a small Steam Rich Presence record from the live Ho
 
 ### 2. First publish
 
-Either:
-
-- **Host** the world from the Shared Worlds screen. Behind the scenes this runs the normal Host & Play flow with `Lobby | FriendsCanJoin`. When the session ends, the server process saves the world and uploads snapshot v1 to your own friends-only Workshop item.
-- Or play it in single-player; Save & Exit triggers the same snapshot/upload.
+**Host** the world from the Play Shared Worlds screen. Behind the scenes this runs the normal Host & Play flow with `Lobby | FriendsCanJoin`. When the session ends, the server process saves the world and uploads snapshot v1 to your own friends-only Workshop item.
 
 The first upload may ask you to accept the **Steam Workshop Legal Agreement**. The item is kept `FriendsOnly`. It is **not a mod**; do not subscribe to it as a mod.
 
@@ -200,15 +198,11 @@ Invite codes contain the world ID, owner Steam ID, owner Workshop item ID, and w
 3. If a fork is detected, hosting is refused until the group chooses a version in **Info → Use remote** (or keeps the local branch).
 4. When the session ends, the friend's own Workshop item receives vN+1. The original creator does not need to be online.
 
-### 5. Open to friends (single-player → multiplayer)
+### 5. Solo play on a shared world
 
-In-game, press **F9**, then **Open to friends**. The mod:
+Shared worlds are played through **Host & Play**, even when you are the only one online — the server runs locally and friends can drop in whenever they want. Opening a shared world from the vanilla **Single Player** list is blocked: the world appears dimmed (the same treatment vanilla gives a Journey-mode mismatch) and clicking Play shows a rejection menu pointing at **Play Shared Worlds**. This is deliberate — one hosted session at a time is what keeps a single writer and prevents silent offline forks.
 
-1. saves the world,
-2. returns to the title screen,
-3. automatically starts Host & Play for the same world with friends-only lobby visibility.
-
-This is a save/reload flow, not a live conversion. Host & Play in Terraria 1.4.4 is a separate server process; a true in-place conversion is not realistic.
+The in-game **F9** panel still offers **Sync & publish** and **Upload pending** while a session runs.
 
 ### 6. Sync during a session
 
@@ -231,10 +225,10 @@ The in-game **F9** panel has **Sync & publish**. It asks the server to save the 
 - Join a live Host & Play lobby or host the latest snapshot.
 - Host-left recovery with a deterministic SteamID rehost offer, Rich Presence handoff marker and automatic follow-up join.
 - Configurable Shared Worlds autosave upload (default 10 minutes) that updates the same Workshop item and broadcasts to clients.
-- "Open to friends" save → title → Host & Play.
 - Chunked peer transfer over `ModPacket` (16 KB chunks, zip, transport hash, final snapshot hash, ACKs).
 - Pending upload queue with retry, including the "saved but unchanged" case.
 - EULA-needed status surfaced without opening the Steam overlay automatically.
+- Single-player guard: registered worlds are dimmed in the vanilla world list and rejected with vanilla's rejection menu, keeping shared worlds on the hosted path.
 - Config: live autosave timing, auto-upload on exit, host migration, timeouts, backup/history counts, menu button, peer transfer, verbose logging.
 - Unit tests for version graph, invite codes, and hashing.
 
@@ -248,7 +242,7 @@ The in-game **F9** panel has **Sync & publish**. It asks the server to save the 
 - **No Steam Cloud worlds** in 0.2.x. Move the world to local storage first.
 - **Host recovery is coordinated, not seamless.** Clients disconnect, one account is offered the rehost, and everyone else follows the new Steam lobby. A crash before the last autosave can lose a few minutes of progress; the Workshop snapshot is the fallback.
 - **Live discovery is friends-only.** Rich Presence is readable by Steam friends; a client who is not friends with the new host may not see the takeover until the timing window expires.
-- **No live single-player → multiplayer conversion.** Host & Play is a separate process.
+- **Shared worlds never load from the vanilla single-player list.** The row is dimmed like a Journey-mode mismatch and clicking Play opens vanilla's rejection menu pointing at Play Shared Worlds. Solo play happens by hosting locally.
 - **First publish is a two-agreement Steam action.** The owner must accept both the Steam Subscriber Agreement and the Workshop Legal Agreement in the Steam client. The mod shows **EULA needed** but deliberately does not open the overlay.
 - **A latest version can live on a hidden item.** Until its owner accepts the EULA, friends may only see older versions; peer transfer can still deliver the live session.
 - **No hard "wait for everyone" quit gate.** Peer transfer is best-effort; the Workshop upload is the durability guarantee.

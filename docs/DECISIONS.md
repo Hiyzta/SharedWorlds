@@ -376,3 +376,13 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 **Why:** A bespoke palette reads as "modded overlay" and erodes trust; matching the game's own high-water-mark menus (world select) makes the feature feel shipped with the game, which is the bar for sharing it with friends. Reusing vanilla's textures also keeps the mod zero-asset and immune to resolution/UI-scale changes, because the layout is percent-based exactly like `UIWorldSelect`.
 
 **Consequence:** Screens inherit vanilla's look under every menu theme and UI scale, and the scrollbars attach only when the list can actually scroll (vanilla behavior). The kit is internal to the mod: future screens get the styling for free, and a tML texture rename would surface as a load-time log line rather than a visual break.
+
+---
+
+## D-035 — Shared worlds are rejected from the vanilla single-player list with vanilla's own rejection menu
+
+**Decision:** `SharedWorldsSinglePlayerGuard` implements tModLoader's `ModSystem.CanWorldBePlayed`/`WorldCanBePlayedRejectionMessage` hooks. When a registered shared world is selected in the single-player world list, the row renders dimmed and sorts to the bottom — exactly how vanilla treats a Journey-mode mismatch — and clicking Play opens vanilla's rejection menu with a message pointing at the Play Shared Worlds screen. Host & Play (the vanilla button and the mod's own launcher, both of which set the multiplayer menu flag before the world select) and dedicated servers are exempt.
+
+**Why:** The single biggest fork-creator is a friend double-clicking the shared world in the normal single-player list, playing offline, and publishing a competing branch on exit. Reusing tModLoader's own player/world compatibility hooks means the mod inherits vanilla's dimming, ordering, rejection screen and Back behavior with no custom UI, and the check runs at exactly the same place vanilla enforces Journey-mode pairing.
+
+**Consequence:** Solo play on a shared world now happens by hosting locally (friends can drop in at any time). The in-game "Open to friends" conversion is no longer reachable for registered worlds (they can never be in single-player), so the mod's hosting entry points are the Play screen and Manage. A world registered under a different file name (renamed outside the mod) is not matched and stays loadable; the registry keys on the world file name.
