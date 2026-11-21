@@ -17,44 +17,14 @@ public static class HostAndPlay
 
 	public static bool IsSupported => !Main.dedServ && SocialAPI.Network != null && SubmitServerPasswordMethod != null;
 
-	public static string PendingOpenToFriendsWorldId { get; private set; } = "";
-	public static bool PendingOpenToFriendsReady { get; set; }
-
 	/// <summary>Set when the player must pick a character before Host &amp; Play can start.</summary>
 	public static string PendingHostWorldId { get; private set; } = "";
 
 	public static bool IsWaitingForCharacter(string worldId)
 		=> !string.IsNullOrEmpty(worldId) && string.Equals(PendingHostWorldId, worldId, StringComparison.OrdinalIgnoreCase);
 
-	public static bool QueueOpenToFriends(string worldId, out string error)
-	{
-		error = "";
-
-		if (Main.dedServ) {
-			error = "Host & Play is not available on a dedicated server.";
-			return false;
-		}
-
-		if (Main.netMode != Terraria.ID.NetmodeID.SinglePlayer) {
-			error = "Return to single-player first. Open to friends saves and relaunches the world as a Host & Play session.";
-			return false;
-		}
-
-		if (Main.gameMenu) {
-			error = "A world must be loaded before using Open to friends.";
-			return false;
-		}
-
-		PendingOpenToFriendsWorldId = worldId;
-		PendingOpenToFriendsReady = false;
-		WorldGen.SaveAndQuit();
-		return true;
-	}
-
 	public static void ClearPending()
 	{
-		PendingOpenToFriendsWorldId = "";
-		PendingOpenToFriendsReady = false;
 		PendingHostWorldId = "";
 		SharedWorldsPresence.ClearHandoff();
 	}

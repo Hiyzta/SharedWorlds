@@ -95,7 +95,7 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 
 ## D-007 — Main-menu access workaround
 
-**Decision:** A client-only `ModSystem` appends a small "Shared Worlds" button to `MenuLoader.CurrentMenu.UserInterface` while on the title screen, and opens a full-screen `UIState` through `Main.MenuUI` (`menuMode = 888`). A configurable keybind (default `F9`) is a fallback.
+**Decision:** (Superseded by D-036 for the button part.) A client-only `ModSystem` appends a small "Shared Worlds" button to `MenuLoader.CurrentMenu.UserInterface` while on the title screen, and opens a full-screen `UIState` through `Main.MenuUI` (`menuMode = 888`). A configurable keybind (default `F9`) is a fallback.
 
 **Why:** tModLoader has no public hook to add a vanilla main-menu button (`Interface` and `MenuLoader.Add` are internal). `ModMenu.UserInterface` is public and is updated/drawn by tModLoader for the active theme, so appending one element is the least invasive public-API solution and avoids Harmony-patching `Main.DrawMenu`.
 
@@ -313,7 +313,7 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 
 **Decision:** The mod adds **Play Shared Worlds** by IL-editing only the `menuMode == 12` branch of `Main.DrawMenu`: it moves the vanilla Back row down one slot, inserts the new label, increments the visible button count, and maps the extra visual selection back to the vanilla handlers. There is no full replacement of the menu.
 
-**Why:** tModLoader exposes `MenuLoader` for the title screen but no public API for the multiplayer button list. A normal UI overlay would not be a real list row and would not participate in the mouse/gamepad navigation path. A full `DrawMenu` replacement would be a much larger regression risk. The edit is deliberately anchored to the `menuMode == 12` check and the four-instruction `numButtons = 3 + offset` sequence, and it is wrapped in a load-time try/catch. The existing Shared Worlds button remains as a fallback.
+**Why:** tModLoader exposes `MenuLoader` for the title screen but no public API for the multiplayer button list. A normal UI overlay would not be a real list row and would not participate in the mouse/gamepad navigation path. A full `DrawMenu` replacement would be a much larger regression risk. The edit is deliberately anchored to the `menuMode == 12` check and the four-instruction `numButtons = 3 + offset` sequence, and it is wrapped in a load-time try/catch. The F9 hotkey remains the fallback. (The floating title-screen button this originally fell back to was later removed in D-036 once the multiplayer-menu row became the sole entry.)
 
 **Consequence:** A future tModLoader update that changes `Main.DrawMenu` can make the hook fail; the mod logs the failure and the fallback button still opens the setup screen. The Play screen can also be opened from the setup header.
 
@@ -386,3 +386,13 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 **Why:** The single biggest fork-creator is a friend double-clicking the shared world in the normal single-player list, playing offline, and publishing a competing branch on exit. Reusing tModLoader's own player/world compatibility hooks means the mod inherits vanilla's dimming, ordering, rejection screen and Back behavior with no custom UI, and the check runs at exactly the same place vanilla enforces Journey-mode pairing.
 
 **Consequence:** Solo play on a shared world now happens by hosting locally (friends can drop in at any time). The in-game "Open to friends" conversion is no longer reachable for registered worlds (they can never be in single-player), so the mod's hosting entry points are the Play screen and Manage. A world registered under a different file name (renamed outside the mod) is not matched and stays loadable; the registry keys on the world file name.
+
+---
+
+## D-036 — One hub, one-way paths: the navigation graph is cleaned up for release
+
+**Decision:** The Play screen is the mod's single hub. It is entered only from the multiplayer-menu row or the F9 hotkey — the floating title-screen button from the pre-row era is removed. Manage is reachable only from Play's corner button and returns only to it (its other corner button is now **Sync all**, a real maintenance action instead of a loop back to Play); Details views are leaves that return to whichever screen opened them and no longer cross-link to Manage. The "Open to friends" conversion and its queue plumbing were deleted outright once the single-player guard made them unreachable.
+
+**Why:** A menu graph where two screens link to each other in both directions — and a third path sneaks into the same screen via a details view one page away — puts players in a loop and makes "where am I / how do I get back" ambiguous. One-way navigation makes Back always mean "return to where I came from," and removing dead UI beats labelling it.
+
+**Consequence:** Solo conversion into a hosted session no longer exists as a concept; a player who wants to open their current session to friends simply hosts through Play. The `ShowMainMenuButton` config option is gone with the button. F9 at the title screen opens Play and Back returns to the title, which is the intended hotkey behavior.

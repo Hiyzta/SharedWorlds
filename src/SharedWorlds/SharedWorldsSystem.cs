@@ -39,7 +39,7 @@ public sealed class SharedWorldsSystem : ModSystem
 	public override void PostUpdateInput()
 	{
 		// Main.Update returns before PostUpdateEverything on the title screen, so menu-only
-		// work (queued Open to friends and Host & Play continuation) needs this hook.
+		// work (the queued Host & Play continuation after character selection) needs this hook.
 		if (Main.gameMenu)
 			SharedWorldsService.Instance.Tick();
 	}

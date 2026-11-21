@@ -404,17 +404,11 @@ public sealed class SharedWorldsPlayUIState : UIState
 	private void OpenManage()
 	{
 		SoundEngine.PlaySound(SoundID.MenuOpen);
-		Main.MenuUI.SetState(new SharedWorldsUIState(
-			onBack: () => {
-				Main.MenuUI.SetState(this);
-				Main.menuMode = 888;
-				RefreshList();
-			},
-			onPlay: () => {
-				Main.MenuUI.SetState(this);
-				Main.menuMode = 888;
-				RefreshList();
-			}));
+		Main.MenuUI.SetState(new SharedWorldsUIState(onBack: () => {
+			Main.MenuUI.SetState(this);
+			Main.menuMode = 888;
+			RefreshList();
+		}));
 		Main.menuMode = 888;
 	}
 
@@ -692,29 +686,12 @@ public sealed class SharedWorldPlayDetailUIState : UIState
 			Left = StyleDimension.FromPixels(10f),
 			Top = StyleDimension.FromPixels(46f),
 			Width = StyleDimension.FromPixelsAndPercent(-20f, 1f),
-			Height = StyleDimension.FromPixelsAndPercent(-96f, 1f),
+			Height = StyleDimension.FromPixelsAndPercent(-56f, 1f),
 			IsWrapped = true,
 			TextOriginX = 0f,
 			TextColor = Color.White
 		};
 		container.Append(body);
-
-		var manage = SwUI.Button("Manage", 120, () => {
-			Main.MenuUI.SetState(new SharedWorldsUIState(
-				onBack: () => {
-					Main.MenuUI.SetState(_parent);
-					Main.menuMode = 888;
-				},
-				onPlay: () => {
-					Main.MenuUI.SetState(_parent);
-					Main.menuMode = 888;
-				}));
-			Main.menuMode = 888;
-		});
-		manage.VAlign = 1f;
-		manage.HAlign = 1f;
-		manage.Left = StyleDimension.FromPixels(-10f);
-		container.Append(manage);
 
 		root.Append(SwUI.FatButton("Back", () => {
 			SoundEngine.PlaySound(SoundID.MenuClose);

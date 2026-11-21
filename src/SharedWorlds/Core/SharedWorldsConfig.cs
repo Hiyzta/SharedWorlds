@@ -63,9 +63,6 @@ public sealed class SharedWorldsConfig : ModConfig
 
 	[Header("Interface")]
 	[DefaultValue(true)]
-	public bool ShowMainMenuButton { get; set; } = true;
-
-	[DefaultValue(true)]
 	public bool EnablePeerTransfer { get; set; } = true;
 
 	[DefaultValue(false)]

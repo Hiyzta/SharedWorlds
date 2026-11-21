@@ -44,11 +44,6 @@ Configs: {
 			Tooltip: ""
 		}
 
-		ShowMainMenuButton: {
-			Label: Show Main Menu Button
-			Tooltip: ""
-		}
-
 		EnablePeerTransfer: {
 			Label: Enable Peer Transfer
 			Tooltip: ""

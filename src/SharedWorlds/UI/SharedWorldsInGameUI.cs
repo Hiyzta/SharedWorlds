@@ -94,7 +94,6 @@ public sealed class SharedWorldsInGamePanel : UIState
 {
 	private readonly SharedWorldsInGameUI _owner;
 	private UIText _body = null!;
-	private UITextPanel<string> _openButton = null!;
 	private UITextPanel<string> _syncButton = null!;
 	private UITextPanel<string> _pendingButton = null!;
 
@@ -127,7 +126,7 @@ public sealed class SharedWorldsInGamePanel : UIState
 			Top = StyleDimension.FromPixels(8)
 		});
 
-		panel.Append(new UIText("In-game snapshot controls", 0.62f) {
+		panel.Append(new UIText("Session status", 0.62f) {
 			HAlign = 0.5f,
 			Top = StyleDimension.FromPixels(38),
 			TextColor = new Color(190, 210, 255)
@@ -135,43 +134,38 @@ public sealed class SharedWorldsInGamePanel : UIState
 
 		_body = new UIText("", 0.75f) {
 			Left = StyleDimension.FromPixels(22),
-			Top = StyleDimension.FromPixels(80),
+			Top = StyleDimension.FromPixels(84),
 			Width = StyleDimension.FromPixels(556),
-			Height = StyleDimension.FromPixels(112),
+			Height = StyleDimension.FromPixels(130),
 			IsWrapped = true,
 			TextOriginX = 0f,
 			TextColor = Color.White
 		};
 		panel.Append(_body);
 
-		_openButton = SwUI.Button("Open to friends", 174, OpenToFriends);
-		_openButton.Left = StyleDimension.FromPixels(22);
-		_openButton.Top = StyleDimension.FromPixels(212);
-		panel.Append(_openButton);
-
-		_syncButton = SwUI.Button("Sync & publish", 160, SyncAndPublish);
-		_syncButton.Left = StyleDimension.FromPixels(206);
-		_syncButton.Top = StyleDimension.FromPixels(212);
+		_syncButton = SwUI.Button("Sync & publish", 170, SyncAndPublish);
+		_syncButton.Left = StyleDimension.FromPixels(115);
+		_syncButton.Top = StyleDimension.FromPixels(236);
 		panel.Append(_syncButton);
 
-		_pendingButton = SwUI.Button("Upload pending", 160, UploadPending);
-		_pendingButton.Left = StyleDimension.FromPixels(374);
-		_pendingButton.Top = StyleDimension.FromPixels(212);
+		_pendingButton = SwUI.Button("Upload pending", 170, UploadPending);
+		_pendingButton.Left = StyleDimension.FromPixels(295);
+		_pendingButton.Top = StyleDimension.FromPixels(236);
 		panel.Append(_pendingButton);
 
-		panel.Append(new UIText("F9 toggles this panel. 'Open to friends' saves, exits to the title screen and starts Host & Play.", 0.65f) {
+		var close = SwUI.Button("Close", 110, _owner.Close);
+		close.Left = StyleDimension.FromPixels(475);
+		close.Top = StyleDimension.FromPixels(236);
+		panel.Append(close);
+
+		panel.Append(new UIText("F9 toggles this panel. While you host, the Shared Worlds autosave publishes and broadcasts automatically.", 0.65f) {
 			Left = StyleDimension.FromPixels(22),
-			Top = StyleDimension.FromPixels(264),
+			Top = StyleDimension.FromPixels(300),
 			Width = StyleDimension.FromPixels(556),
 			IsWrapped = true,
 			TextOriginX = 0f,
 			TextColor = SwUI.Muted
 		});
-
-		var close = SwUI.Button("Close", 110, _owner.Close);
-		close.Left = StyleDimension.FromPixels(22);
-		close.Top = StyleDimension.FromPixels(338);
-		panel.Append(close);
 	}
 
 	public void Refresh()
@@ -179,7 +173,6 @@ public sealed class SharedWorldsInGamePanel : UIState
 		SharedWorldRecord? record = SharedWorldsService.Instance.CurrentRecord;
 		if (record == null) {
 			_body.SetText("This world is not registered as a shared world. Exit to the title screen, open Shared Worlds and register it first.");
-			_openButton.SetText("Unavailable");
 			_syncButton.SetText("Unavailable");
 			_pendingButton.SetText("Unavailable");
 			return;
@@ -192,25 +185,8 @@ public sealed class SharedWorldsInGamePanel : UIState
 			$"This account's item: {(record.WorkshopItemId == 0 ? "not created yet" : record.WorkshopItemId.ToString())}\n" +
 			$"Workshop: {(record.PendingNeedsEula ? "EULA needed" : record.PendingUpload ? "upload pending" : "no pending upload")}");
 
-		_openButton.SetText("Open to friends");
-		_syncButton.SetText(Main.netMode == NetmodeID.MultiplayerClient ? "Sync & publish" : "Host only");
+		_syncButton.SetText("Sync & publish");
 		_pendingButton.SetText(record.PendingUpload ? "Upload pending" : "No pending");
-	}
-
-	private void OpenToFriends()
-	{
-		SharedWorldRecord? record = SharedWorldsService.Instance.CurrentRecord;
-		if (record == null)
-			return;
-
-		_owner.Close();
-		SharedWorldsService.Instance.QueueOpenToFriends(record.WorldId, out string error);
-		if (!string.IsNullOrEmpty(error)) {
-			Main.NewText("Open to friends: " + error, 255, 180, 120);
-			return;
-		}
-
-		Main.NewText("Saving and reopening this world as a Host & Play session...", 160, 255, 180);
 	}
 
 	private void SyncAndPublish()

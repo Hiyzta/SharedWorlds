@@ -64,9 +64,9 @@ Status legend:
 | Interrupted install | Prevented | Files are copied to temp, hash-verified, then atomically moved; failure restores the backup. |
 | Different mods on different machines | Mitigated | Hashes differ and tModLoader blocks joining; the mod records the mod list in the manifest. |
 | Dedicated server without a Steam client | Mitigated | No Workshop upload; snapshot stays local/pending. Host & Play is the supported path. |
-| "Open to friends" transition | Mitigated | The single-player unload defers to the Host & Play server's shutdown upload. If the server fails to start, the save waits for the next normal save/unload. (With the single-player guard in place this transition is no longer reachable for registered worlds; the row is kept for the pre-guard upgrade path.) |
+| Screen navigation | Prevented | One hub with one-way paths: Play ↔ Manage has a single link each way, Details views are leaves, and every Back returns to the screen that opened it. There are no loops or dead-end pages. |
 | Private Host & Play API changes | Mitigated | Reflection is isolated; failure falls back to the normal Host & Play screen. |
-| Main menu hook availability | Prevented | Menu work uses `PostUpdateInput`; the button attaches to the active ModMenu UI and F9 is a fallback. |
+| Title-screen entry | Prevented | No UI is bolted onto the title screen. Entry is the multiplayer-menu row (vanilla menu chain) or the F9 hotkey read from `Main.keyState` in `PostUpdateInput`, which runs at the title screen. |
 | Multiplayer-menu IL hook fails after a tModLoader update | Mitigated | The hook is anchored to `menuMode == 12` and wrapped in try/catch. The setup screen and its **Play** button remain available. |
 | A friend is hosting but their Rich Presence has not propagated yet | Mitigated | The Play screen refreshes presence every few seconds. The world appears offline until Steam updates; Refresh retries. |
 | Join a live lobby that has just closed | Mitigated | Steam reports the join failure; the Play screen stays usable and the world returns to offline/hostable. |

@@ -19,7 +19,6 @@ public sealed class SharedWorldsService
 	private string _sessionStartHash = "";
 	private int _sessionStartVersion;
 	private bool _loadedAsMultiplayerClient;
-	private DateTime _pendingOpenToFriendsSince;
 
 	private readonly object _autoSaveLock = new();
 	private DateTime _lastAutoSaveRequestUtc = DateTime.UtcNow;
@@ -266,12 +265,6 @@ public sealed class SharedWorldsService
 		if (record == null) {
 			if (unexpectedClientDisconnect)
 				SharedWorldsMigration.Begin(currentId, worldPath);
-			return;
-		}
-
-		if (string.Equals(HostAndPlay.PendingOpenToFriendsWorldId, record.WorldId, StringComparison.OrdinalIgnoreCase)) {
-			HostAndPlay.PendingOpenToFriendsReady = true;
-			_pendingOpenToFriendsSince = DateTime.UtcNow;
 			return;
 		}
 
@@ -1382,11 +1375,6 @@ public sealed class SharedWorldsService
 		return record;
 	}
 
-	public void QueueOpenToFriends(string worldId, out string error)
-	{
-		HostAndPlay.QueueOpenToFriends(worldId, out error);
-	}
-
 	public void SuppressAutoSaveForExplicitSave()
 	{
 		Interlocked.Increment(ref _suppressAutoSave);
@@ -1625,7 +1613,7 @@ public sealed class SharedWorldsService
 		SharedWorldsPresence.PublishHosting(record, lobbyId, players, record.LocalHash, record.LocalVersion, record.LastUpdatedUtc);
 	}
 
-	/// <summary>Called from ModSystem.PostUpdateEverything on the client. Starts a queued Open to friends once the title screen is ready.</summary>
+	/// <summary>Called from ModSystem.PostUpdateEverything on the client. Pumps Steam and continues a queued Host &amp; Play after character selection.</summary>
 	public void Tick()
 	{
 		WorkshopService.PumpCallbacks();
@@ -1633,30 +1621,6 @@ public sealed class SharedWorldsService
 
 		if (Main.netMode == NetmodeID.Server)
 			TickServerPresence();
-
-		if (!HostAndPlay.PendingOpenToFriendsReady || Main.dedServ)
-			return;
-
-		if (!Main.gameMenu || Main.menuMode != 0)
-			return;
-
-		if ((DateTime.UtcNow - _pendingOpenToFriendsSince).TotalSeconds > 90) {
-			HostAndPlay.ClearPending();
-			LastStatus = "Open to friends timed out before the title screen was ready.";
-			return;
-		}
-
-		string worldId = HostAndPlay.PendingOpenToFriendsWorldId;
-		HostAndPlay.ClearPending();
-
-		SharedWorldRecord? record = Registry.FindByWorldId(worldId);
-		if (record == null)
-			return;
-
-		if (!HostAndPlay.Start(record, out string error)) {
-			LastStatus = error;
-			Log.Warn(error);
-		}
 	}
 
 	public static List<ModEntry> GetCurrentMods()

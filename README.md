@@ -172,9 +172,11 @@ The real **Play Shared Worlds** row in the multiplayer menu opens the Play scree
 
 The Play screen is backed by a small Steam Rich Presence record from the live Host & Play server (`world`, `lobby`, `hash`, `players`, timestamp). Friends can therefore see a live world without a backend.
 
+**How the screens connect:** everything is one hub with one-way paths, so you can never end up in a menu loop — **Play** is the hub; its **Manage** corner button opens the setup surface (register, import, invites, publishing, fork choices, **Sync all**) whose **Back** returns to Play; each screen's **Details** view returns the same way. The title screen has no floating buttons: the mod is entered through the multiplayer menu row, or **F9**.
+
 ### 1. Register a world
 
-1. Launch tModLoader, open **Shared Worlds** on the main menu (or press **F9**).
+1. Launch tModLoader, open **Multiplayer → Play Shared Worlds** (or press **F9** at the title screen).
 2. Choose **Register world** and pick a **local** world. Steam Cloud worlds are not supported yet.
 3. The world is registered under a new stable GUID. No Workshop item exists until the first publish.
 
@@ -195,7 +197,7 @@ Invite codes contain the world ID, owner Steam ID, owner Workshop item ID, and w
 1. The friend opens **Shared Worlds**, selects the world and presses **Host**.
 2. The mod queries all known participant items, downloads the newest verified snapshot if needed, and starts **Host & Play**.
    Use this screen (or the in-game F9 panel) rather than the normal Host & Play button: the normal button does not run the pre-host sync.
-3. If a fork is detected, hosting is refused until the group chooses a version in **Info → Use remote** (or keeps the local branch).
+3. If a fork is detected, hosting is refused until the group chooses a version in **Details → Use remote** (or keeps the local branch).
 4. When the session ends, the friend's own Workshop item receives vN+1. The original creator does not need to be online.
 
 ### 5. Solo play on a shared world
@@ -220,7 +222,7 @@ The in-game **F9** panel has **Sync & publish**. It asks the server to save the 
 - Fork UI with a separate choice for each remote head (two-click confirmation); the losing branch is backed up.
 - Local registry recovery from the `SharedWorldId` stored in `.twld`.
 - Discovery of a participant's item via their published Workshop items (handles "joined before creating an item" and recreated items).
-- Real Play Shared Worlds row in the multiplayer menu; every screen (Play, Manage, world picker, details, recovery, in-game F9 panel) styled with Terraria's own "fancy UI" frame and one shared design kit, plus the main-menu button and F9 keybind.
+- Real Play Shared Worlds row in the multiplayer menu; every screen (Play, Manage, world picker, details, recovery, in-game F9 panel) styled with Terraria's own "fancy UI" frame and one shared design kit, plus the F9 keybind at the title screen.
 - Live host advertisement via Steam Rich Presence with player count, latest snapshot hash and timestamps.
 - Join a live Host & Play lobby or host the latest snapshot.
 - Host-left recovery with a deterministic SteamID rehost offer, Rich Presence handoff marker and automatic follow-up join.
@@ -229,7 +231,7 @@ The in-game **F9** panel has **Sync & publish**. It asks the server to save the 
 - Pending upload queue with retry, including the "saved but unchanged" case.
 - EULA-needed status surfaced without opening the Steam overlay automatically.
 - Single-player guard: registered worlds are dimmed in the vanilla world list and rejected with vanilla's rejection menu, keeping shared worlds on the hosted path.
-- Config: live autosave timing, auto-upload on exit, host migration, timeouts, backup/history counts, menu button, peer transfer, verbose logging.
+- Config: live autosave timing, auto-upload on exit, host migration, timeouts, backup/history counts, peer transfer, verbose logging.
 - Unit tests for version graph, invite codes, and hashing.
 
 ## Known limitations
@@ -261,7 +263,7 @@ Start tModLoader through Steam, not by running the executable directly. GOG/offl
 The owner's item is friends-only. Add each other on Steam. The error names the account.
 
 **Upload says pending**
-The snapshot is safe locally. Open Shared Worlds → Info → **Publish pending**, or wait until the next save. Check the tModLoader log for the Steam error. If Steam needs the Workshop Legal Agreement, the world shows **EULA needed**. Accept both agreements in the Steam client (the app-specific page contains the Steam Subscriber Agreement and the Workshop Legal Agreement; scroll down for the second), then use **Publish pending**. The mod does not open the overlay itself.
+The snapshot is safe locally. Open Manage → Details → **Publish pending**, or wait until the next save. Check the tModLoader log for the Steam error. If Steam needs the Workshop Legal Agreement, the world shows **EULA needed**. Accept both agreements in the Steam client (the app-specific page contains the Steam Subscriber Agreement and the Workshop Legal Agreement; scroll down for the second), then use **Publish pending**. The mod does not open the overlay itself.
 
 **"Downloaded snapshot does not match the queried version metadata"**
 Steam has not finished propagating the update, or an item was changed mid-query. Retry in a minute. The mod refuses to install mismatched content.
@@ -308,7 +310,7 @@ dotnet tModLoader.dll -server \
 
 The log should show the mod loading, a snapshot being built after Save/Exit, and no exceptions.
 
-**Single-account verification (2026-11-20):** registered a world, started Host & Play, saved on server shutdown, created temporary Workshop items, published v1–v5 as friends-only, queried them back, downloaded one into a fresh save, verified the hashes, and fast-forwarded. The main-menu button, world picker, sync, detail, in-game panel, and Host & Play launch were exercised through the real UI. The temporary test items were set Private and deleted; no test world remains on the account.
+**Single-account verification (2026-11-20/21):** registered a world, started Host & Play, saved on server shutdown, created temporary Workshop items, published v1–v5 as friends-only, queried them back, downloaded one into a fresh save, verified the hashes, and fast-forwarded. The multiplayer-menu row, F9 entry, world picker, sync, details, in-game panel, single-player rejection, Sync all and the Host & Play launch were exercised through the real UI. The temporary test items were set Private and deleted; no test world remains on the account.
 
 **EULA verification:** after accepting both the Steam Subscriber Agreement and the Workshop Legal Agreement on the app-specific page, `SteamUGC.GetWorkshopEULAStatus()` returned `m_bNeedsAction = false`, and a subsequent upload completed with `PendingUpload = false`. The mod now only reports **EULA needed**; it does not open the overlay.
 

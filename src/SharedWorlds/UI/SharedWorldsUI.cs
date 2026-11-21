@@ -14,16 +14,6 @@ namespace SharedWorlds.UI;
 
 public static class SharedWorldsUI
 {
-	public static void Open()
-	{
-		if (Main.dedServ)
-			return;
-
-		SoundEngine.PlaySound(SoundID.MenuOpen);
-		Main.MenuUI.SetState(new SharedWorldsUIState());
-		Main.menuMode = 888;
-	}
-
 	/// <summary>Opens the clean Play screen used by the real multiplayer-menu row.</summary>
 	public static void OpenPlay(int returnMenuMode = 12, string? status = null, string? focusWorldId = null)
 	{
@@ -99,15 +89,14 @@ public sealed class SharedWorldsUIState : UIState
 	private Color _statusColor = SwUI.Muted;
 	private bool _busy;
 	private Task<SyncReport>? _task;
+	private Task<(int Updated, int Failed, int Forks)>? _syncAllTask;
 	private string _hostAfterSync = "";
 	private readonly Action? _onBack;
-	private readonly Action? _onPlay;
 	public SyncReport? LastSyncReport { get; private set; }
 
-	public SharedWorldsUIState(Action? onBack = null, Action? onPlay = null)
+	public SharedWorldsUIState(Action? onBack = null)
 	{
 		_onBack = onBack;
-		_onPlay = onPlay;
 	}
 
 	public override void OnInitialize()
@@ -162,16 +151,10 @@ public sealed class SharedWorldsUIState : UIState
 			if (_onBack != null)
 				_onBack();
 			else
-				SharedWorldsUI.Close();
+				SharedWorldsUI.CloseTo(0);
 		}, 0f));
 
-		root.Append(SwUI.FatButton("Play", () => {
-			SoundEngine.PlaySound(SoundID.MenuOpen);
-			if (_onPlay != null)
-				_onPlay();
-			else
-				SharedWorldsUI.OpenPlay(0);
-		}, 1f));
+		root.Append(SwUI.FatButton("Sync all", SyncAll, 1f));
 	}
 
 	public override void Recalculate()
@@ -229,6 +212,32 @@ public sealed class SharedWorldsUIState : UIState
 	public override void Update(GameTime gameTime)
 	{
 		base.Update(gameTime);
+
+		if (_syncAllTask != null && _syncAllTask.IsCompleted) {
+			Task<(int Updated, int Failed, int Forks)> finished = _syncAllTask;
+			_syncAllTask = null;
+			_busy = false;
+			try {
+				(int updated, int failed, int forks) = finished.Result;
+				if (forks > 0) {
+					ShowStatus($"Synced. {updated} world(s) updated, but {forks} need a fork choice — open Details on the world to pick a branch.", SwUI.Warn);
+				}
+				else if (failed > 0) {
+					ShowStatus($"Synced with errors: {updated} updated, {failed} failed. Check the log or try the world's Sync button.", SwUI.Warn);
+				}
+				else {
+					ShowStatus(updated == 0
+						? "Everything is already up to date."
+						: $"Updated {updated} world(s); everything else is up to date.", SwUI.Good);
+				}
+			}
+			catch (Exception e) {
+				ShowStatus("Sync all failed: " + e.Message, SwUI.Warn);
+				Log.Error("Sync all failed.", e);
+			}
+
+			RefreshList();
+		}
 
 		if (_task == null || !_task.IsCompleted)
 			return;
@@ -347,10 +356,58 @@ public sealed class SharedWorldsUIState : UIState
 		_task = Task.Run(async () => await SharedWorldsService.Instance.SyncAsync(record, downloadIfNewer: true, progress: null, CancellationToken.None));
 	}
 
+	/// <summary>Checks every registered world and downloads the newest verified snapshot for each.</summary>
+	public void SyncAll()
+	{
+		if (_busy || _syncAllTask != null)
+			return;
+
+		List<SharedWorldRecord> records = SharedWorldsService.Instance.Registry.Snapshot()
+			.OrderByDescending(r => r.LastUpdatedUtc)
+			.ToList();
+
+		if (records.Count == 0) {
+			ShowStatus("Nothing to sync yet. Register a world or import an invite first.");
+			return;
+		}
+
+		_busy = true;
+		LastSyncReport = null;
+		_hostAfterSync = "";
+		ShowStatus($"Syncing {records.Count} shared world(s) from the Workshop...", SwUI.Bright);
+		_syncAllTask = Task.Run(async () => {
+			int updated = 0, failed = 0, forks = 0;
+			foreach (SharedWorldRecord record in records) {
+				try {
+					SyncReport report = await SharedWorldsService.Instance.SyncAsync(record, downloadIfNewer: true, progress: null, CancellationToken.None);
+					switch (report.Status) {
+						case SyncStatus.RemoteNewer:
+							updated++;
+							if (forks == 0 && report.Status == SyncStatus.Fork)
+								LastSyncReport = report;
+							break;
+						case SyncStatus.Fork:
+							forks++;
+							if (LastSyncReport == null)
+								LastSyncReport = report;
+							break;
+						case SyncStatus.Error:
+							failed++;
+							break;
+					}
+				}
+				catch {
+					failed++;
+				}
+			}
+			return (updated, failed, forks);
+		});
+	}
+
 	private static string FormatReport(SyncReport report)
 	{
 		return report.Status switch {
-			SyncStatus.Fork => "Fork detected. Open Info for both versions; no files were overwritten. " + report.Message,
+			SyncStatus.Fork => "Fork detected. Open Details for both versions; no files were overwritten. " + report.Message,
 			SyncStatus.Error => "Error: " + report.Message,
 			SyncStatus.WorkshopUnavailable => "Workshop unavailable; local world is unchanged. " + report.Message,
 			SyncStatus.RemoteNewer => "Updated. " + report.Message,
@@ -466,7 +523,7 @@ internal sealed class ManageWorldCard : UIPanel
 		invite.Left = StyleDimension.FromPixels(256f);
 		Append(invite);
 
-		var info = SwUI.Button("Info", 90, () => _owner.OpenDetail(_record));
+		var info = SwUI.Button("Details", 90, () => _owner.OpenDetail(_record));
 		info.VAlign = 1f;
 		info.Left = StyleDimension.FromPixels(362f);
 		Append(info);
