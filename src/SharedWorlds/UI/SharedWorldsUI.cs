@@ -436,7 +436,13 @@ public sealed class SharedWorldsUIState : UIState
 		Main.menuMode = 888;
 	}
 
+	/// <summary>Register world: shows the Steam agreement notice first if it has not been accepted yet.</summary>
 	public void OpenPicker()
+	{
+		SharedWorldsEulaGate.ShowIfNeeded(OpenPickerCore);
+	}
+
+	private void OpenPickerCore()
 	{
 		SoundEngine.PlaySound(SoundID.MenuOpen);
 		Main.LoadWorlds();
@@ -444,7 +450,13 @@ public sealed class SharedWorldsUIState : UIState
 		Main.menuMode = 888;
 	}
 
+	/// <summary>Import invite: shows the Steam agreement notice first if it has not been accepted yet.</summary>
 	public void OpenImport()
+	{
+		SharedWorldsEulaGate.ShowIfNeeded(OpenImportCore);
+	}
+
+	private void OpenImportCore()
 	{
 		SoundEngine.PlaySound(SoundID.MenuOpen);
 		var keyboard = new UIVirtualKeyboard("Import Shared Worlds invite", "", OnImportSubmitted, () => {

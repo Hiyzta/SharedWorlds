@@ -174,6 +174,17 @@ The Play screen is backed by a small Steam Rich Presence record from the live Ho
 
 **How the screens connect:** everything is one hub with one-way paths, so you can never end up in a menu loop — **Play** is the hub; its **Manage** corner button opens the setup surface (register, import, invites, publishing, fork choices, **Sync all**) whose **Back** returns to Play; each screen's **Details** view returns the same way. The title screen has no floating buttons: the mod is entered through the multiplayer menu row, or **F9**.
 
+### First time: the Steam agreements
+
+On your first **Play Shared Worlds**, **Register world** or **Import invite**, the mod checks this machine's Steam Workshop agreement status. Until Steam reports that the **Steam Subscriber Agreement** and the **Steam Workshop Legal Agreement** have both been accepted, a notice explains what is needed and offers:
+
+- **Open the Steam page** — the game's Workshop hub, where the agreements appear the first time you publish anything (accepting once covers every later upload).
+- **Check again** — re-reads the status from Steam and shows the result live.
+- **Continue** — skip for now; the notice returns on the next entry point until the agreements are accepted.
+- **Don't remind me again** — persists the choice in the mod config (**Interface → Don't Remind About Workshop Agreements**); turn it back off there to see the notice again.
+
+Until the agreements are accepted, the first snapshot upload stays pending and is retried automatically after you accept.
+
 ### 1. Register a world
 
 1. Launch tModLoader, open **Multiplayer → Play Shared Worlds** (or press **F9** at the title screen).

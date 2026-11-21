@@ -156,7 +156,7 @@ public sealed class MultiplayerMenuSystem : ModSystem
 			if (Main.menuMode != 12)
 				return;
 
-			SharedWorldsUI.OpenPlay(12);
+			SharedWorldsEulaGate.ShowIfNeeded(() => SharedWorldsUI.OpenPlay(12));
 		});
 	}
 }

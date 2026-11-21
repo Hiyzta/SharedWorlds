@@ -28,10 +28,12 @@ public sealed class SharedWorldsTitleHotkey : ModSystem
 			return;
 		}
 
+		SharedWorldsEulaGate.PrewarmOnce();
+
 		bool f9 = Main.keyState.IsKeyDown(Keys.F9);
 		if (f9 && !_f9Down) {
 			SoundEngine.PlaySound(SoundID.MenuOpen);
-			SharedWorldsUI.OpenPlay(0);
+			SharedWorldsEulaGate.ShowIfNeeded(() => SharedWorldsUI.OpenPlay(0));
 			_f9Down = true;
 			return;
 		}

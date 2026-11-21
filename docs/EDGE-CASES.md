@@ -14,6 +14,7 @@ Status legend:
 |---|---|---|
 | Crash/power loss before an autosave | Not fixable | Progress since the last autosave/upload is lost. The last successful snapshot remains; the next normal save/exit publishes a new one. |
 | Crash/power loss before save/unload | Not fixable | No exit snapshot from that session. With live autosave enabled, the last 10-minute snapshot is still on the same Workshop item; otherwise the next load records the on-disk autosave as a local head. |
+| Workshop agreements not accepted yet | Mitigated | Play/Register/Import check `SteamUGC.GetWorkshopEULAStatus` locally and show a notice until Steam reports both agreements accepted. Continue skips for the moment; "Don't remind me again" persists the choice in the mod config. First uploads stay pending and retry. |
 | Shared world opened from the vanilla single-player list | Prevented | The row is dimmed like a Journey-mode mismatch and clicking Play opens vanilla's rejection menu pointing at Play Shared Worlds. Host & Play and dedicated servers stay allowed. |
 | Autosave fires while an earlier upload is still running | Prevented | Uploads are serialized. The older upload is skipped if the local head has advanced, so the item cannot move backwards. |
 | Autosave save fails or Steam is offline | Mitigated | The snapshot is marked pending and retried. The world keeps playing; the UI shows the pending state. |

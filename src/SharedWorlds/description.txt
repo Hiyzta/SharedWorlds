@@ -11,6 +11,7 @@ Features:
 - Host-left prompt with a rehost election and automatic rejoin
 - Per-account Workshop storage (friends-only)
 - Timestamped snapshot history, hash verification and local backups
+- A vanilla-styled Steam Workshop agreement notice before your first play/register/import, with skip and don't-remind options
 - Fork detection instead of silent overwrites
 - Peer-to-peer snapshot transfer during a session
 

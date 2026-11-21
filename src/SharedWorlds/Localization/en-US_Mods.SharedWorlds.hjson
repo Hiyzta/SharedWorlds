@@ -49,6 +49,11 @@ Configs: {
 			Tooltip: ""
 		}
 
+		DontRemindWorkshopEula: {
+			Label: Don't Remind About Workshop Agreements
+			Tooltip: Suppress the one-time Steam Workshop agreement notice shown before playing, registering or importing. Turn this back on in the mod config to see the notice again.
+		}
+
 		VerboseLogging: {
 			Label: Verbose Logging
 			Tooltip: ""

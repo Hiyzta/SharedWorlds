@@ -66,5 +66,8 @@ public sealed class SharedWorldsConfig : ModConfig
 	public bool EnablePeerTransfer { get; set; } = true;
 
 	[DefaultValue(false)]
+	public bool DontRemindWorkshopEula { get; set; } = false;
+
+	[DefaultValue(false)]
 	public bool VerboseLogging { get; set; } = false;
 }

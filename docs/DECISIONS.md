@@ -396,3 +396,13 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 **Why:** A menu graph where two screens link to each other in both directions — and a third path sneaks into the same screen via a details view one page away — puts players in a loop and makes "where am I / how do I get back" ambiguous. One-way navigation makes Back always mean "return to where I came from," and removing dead UI beats labelling it.
 
 **Consequence:** Solo conversion into a hosted session no longer exists as a concept; a player who wants to open their current session to friends simply hosts through Play. The `ShowMainMenuButton` config option is gone with the button. F9 at the title screen opens Play and Back returns to the title, which is the intended hotkey behavior.
+
+---
+
+## D-037 — The Workshop agreement notice is checked locally and shown from every entry point
+
+**Decision:** Play Shared Worlds, Register world and Import invite run `SteamUGC.GetWorkshopEULAStatus` (prewarmed in the background at the title screen) and, when Steam reports the Workshop Legal Agreement still needs accepting, show a vanilla-styled notice before continuing. The notice offers to open the game's Workshop hub, re-checks on demand, and can be dismissed per-use or permanently via a `DontRemindWorkshopEula` mod-config flag. It reappears on every entry point until Steam reports the agreements accepted.
+
+**Why:** The first upload is exactly when a surprise legal dialog feels broken: the snapshot goes pending and the user may not connect the Steam dialog to the mod. Telling people up front — with the real status read from their own machine — turns a mid-session stumble into a one-time setup step. A permanent opt-out in the mod config keeps the notice honest: it nags by default, but the user always controls it, and the setting is discoverable in the normal mod-config UI.
+
+**Consequence:** The check is best-effort: on a Steam error the entry points proceed without nagging rather than blocking on a failed status read. Accounts that never accept simply keep getting the notice (unless suppressed) and their uploads keep retrying through the existing pending path, which is the same behavior as before the notice existed.
