@@ -14,6 +14,7 @@ All notable changes to Shared Worlds are documented here. The format follows Kee
 - A Steam Rich Presence handoff marker so two clients cannot start competing hosts during recovery.
 - Client snapshot requests on join, keeping a local recovery copy ready.
 - Timestamp-first UI for world rows, details, history and fork choices. Internal version numbers remain for ancestry only.
+- A full **vanilla-styled UI pass**: every screen (Play, Manage, world picker, details, host-disconnected recovery, the in-game F9 panel and the title-screen entry) now uses Terraria's own "fancy UI" design language — the same frame, palette, overlapping title tab, inner-panel tag chips, divider lines, hover menu-tick sounds and large corner buttons as the vanilla world/character select, driven by one shared design kit (`SwUI`).
 
 ### Changed
 

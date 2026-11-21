@@ -162,11 +162,11 @@ Build requirements: .NET 8 SDK. The project imports `tMLMod.targets` from the tM
 
 ### Play Shared Worlds
 
-The real **Play Shared Worlds** row in the multiplayer menu opens the clean Play screen:
+The real **Play Shared Worlds** row in the multiplayer menu opens the Play screen, framed exactly like Terraria's own world select (title tab, blue panel frame, large corner buttons) so it reads as part of the game:
 
-- **Online** worlds show the host, current player count and a **Join** action. Joining uses tModLoader's normal Steam-lobby join flow.
-- **Offline** worlds show the last-saved timestamp and a **Host** action. Hosting checks/downloads the newest verified snapshot first.
-- **Sync problems** show **Resolve** and open the details/history view.
+- Each world is a card in the vanilla style: name and divider, then tag chips showing **live state** (`LIVE · host · players` / `OFFLINE`), **save age** (`Saved 5m ago`) and **sync state** (`Up to date`, `A newer snapshot is available`, `Fork — resolve in Manage`, …).
+- The bottom edge of each card carries the action: **Join** a live host (vanilla Steam-lobby join), **Host** the latest verified snapshot, **Sync** when no local copy exists yet, or **Resolve** a fork/sync error. **Details** opens the per-world view.
+- A live summary line (`2 shared worlds · 1 live now · checked just now`) sits above the list with a **Refresh** button; a footer line reports progress and results without covering anything.
 - The screen only lists worlds this account has registered or imported. There is no friend-world discovery.
 
 The Play screen is backed by a small Steam Rich Presence record from the live Host & Play server (`world`, `lobby`, `hash`, `players`, timestamp). Friends can therefore see a live world without a backend.
@@ -226,7 +226,7 @@ The in-game **F9** panel has **Sync & publish**. It asks the server to save the 
 - Fork UI with a separate choice for each remote head (two-click confirmation); the losing branch is backed up.
 - Local registry recovery from the `SharedWorldId` stored in `.twld`.
 - Discovery of a participant's item via their published Workshop items (handles "joined before creating an item" and recreated items).
-- Real Play Shared Worlds row in the multiplayer menu, a clean Play screen, the setup screen, main-menu button and F9 keybind.
+- Real Play Shared Worlds row in the multiplayer menu; every screen (Play, Manage, world picker, details, recovery, in-game F9 panel) styled with Terraria's own "fancy UI" frame and one shared design kit, plus the main-menu button and F9 keybind.
 - Live host advertisement via Steam Rich Presence with player count, latest snapshot hash and timestamps.
 - Join a live Host & Play lobby or host the latest snapshot.
 - Host-left recovery with a deterministic SteamID rehost offer, Rich Presence handoff marker and automatic follow-up join.

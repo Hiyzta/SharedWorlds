@@ -29,20 +29,21 @@ public sealed class MainMenuButtonSystem : ModSystem
 		if (Main.dedServ)
 			return;
 
-		_button = new UITextPanel<string>("Shared Worlds", 0.68f) {
-			Width = StyleDimension.FromPixels(170),
+		_button = new UITextPanel<string>("Shared Worlds", 0.72f) {
+			Width = StyleDimension.FromPixels(178),
 			Height = StyleDimension.FromPixels(38),
 			HAlign = 1f,
 			VAlign = 0f,
 			Left = StyleDimension.FromPixels(-24),
 			Top = StyleDimension.FromPixels(112),
-			BackgroundColor = new Color(22, 48, 66, 235),
-			BorderColor = new Color(82, 174, 192, 220)
+			BackgroundColor = SwUI.ButtonBg,
+			BorderColor = SwUI.ButtonBorder
 		};
+		SwUI.WireHover(_button);
 
 		_button.OnLeftClick += (_, _) => {
 			SoundEngine.PlaySound(SoundID.MenuOpen);
-			SharedWorldsUI.Open();
+			SharedWorldsUI.OpenPlay(0);
 		};
 
 		_ownedState = new UIState();
@@ -72,7 +73,7 @@ public sealed class MainMenuButtonSystem : ModSystem
 		bool f9 = Main.keyState.IsKeyDown(Keys.F9);
 		if (f9 && !_f9Down) {
 			SoundEngine.PlaySound(SoundID.MenuOpen);
-			SharedWorldsUI.Open();
+			SharedWorldsUI.OpenPlay(0);
 			_f9Down = true;
 			return;
 		}

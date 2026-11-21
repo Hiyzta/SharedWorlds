@@ -11,15 +11,17 @@ namespace SharedWorlds.UI;
 /// <summary>
 /// Shown when a client loses its host. One account at a time is offered the rehost action;
 /// everyone else sees who is being asked. If a new lobby appears, clients follow it.
+/// Framed like the rest of the mod's screens so recovery feels like part of the game.
 /// </summary>
 public sealed class SharedWorldsMigrationUIState : UIState
 {
-	private UIText _title = null!;
+	private const float ContainerBottomGap = 110f;
+
 	private UIText _body = null!;
+	private UIText _status = null!;
 	private UIText _detail = null!;
 	private UITextPanel<string> _primary = null!;
 	private UITextPanel<string> _decline = null!;
-	private UITextPanel<string> _back = null!;
 
 	private DateTime _lastPollUtc = DateTime.MinValue;
 	private DateTime _foundUtc = DateTime.MinValue;
@@ -33,63 +35,56 @@ public sealed class SharedWorldsMigrationUIState : UIState
 
 	public override void OnInitialize()
 	{
-		float panelWidth = Math.Clamp(Main.screenWidth - 120, 680, 860);
-		float panelHeight = Math.Clamp(Main.screenHeight - 120, 420, 520);
+		UIElement root = SwUI.MakeRoot(620f);
+		Append(root);
+		root.Append(SwUI.TabTitle("Host Disconnected"));
 
-		var panel = new UIPanel {
-			Width = StyleDimension.FromPixels(panelWidth),
-			Height = StyleDimension.FromPixels(panelHeight),
-			HAlign = 0.5f,
-			VAlign = 0.5f,
-			BackgroundColor = new Color(11, 21, 33, 250),
-			BorderColor = new Color(64, 96, 118, 255)
-		};
-		Append(panel);
+		var container = SwUI.MakeContainer(ContainerBottomGap);
+		root.Append(container);
 
-		var header = new UIPanel {
-			Width = StyleDimension.FromPixelsAndPercent(0, 1f),
-			Height = StyleDimension.FromPixels(92),
-			BackgroundColor = new Color(38, 48, 62, 255),
-			BorderColor = new Color(64, 96, 118, 255)
-		};
-		panel.Append(header);
-
-		_title = new UIText("Shared world session ended", 1.05f, large: true) {
-			Left = StyleDimension.FromPixels(24),
-			Top = StyleDimension.FromPixels(12),
-			TextOriginX = 0f
-		};
-		panel.Append(_title);
-
-		_body = new UIText("", 0.76f) {
-			Left = StyleDimension.FromPixels(24),
-			Top = StyleDimension.FromPixels(52),
-			Width = StyleDimension.FromPixels(panelWidth - 48),
-			Height = StyleDimension.FromPixels(52),
+		_body = new UIText("", 0.85f) {
+			Left = StyleDimension.FromPixels(10f),
+			Top = StyleDimension.FromPixels(10f),
+			Width = StyleDimension.FromPixelsAndPercent(-20f, 1f),
+			Height = StyleDimension.FromPixels(64f),
 			IsWrapped = true,
 			TextOriginX = 0f,
-			TextColor = new Color(194, 220, 232)
+			TextColor = Color.White
 		};
-		panel.Append(_body);
+		container.Append(_body);
 
-		_detail = new UIText("", 0.66f) {
-			Left = StyleDimension.FromPixels(24),
-			Top = StyleDimension.FromPixels(116),
-			Width = StyleDimension.FromPixels(panelWidth - 48),
-			Height = StyleDimension.FromPixels(panelHeight - 220),
+		_status = new UIText("", 0.85f) {
+			Left = StyleDimension.FromPixels(10f),
+			Top = StyleDimension.FromPixels(84f),
+			Width = StyleDimension.FromPixelsAndPercent(-20f, 1f),
+			Height = StyleDimension.FromPixels(46f),
 			IsWrapped = true,
 			TextOriginX = 0f,
-			TextColor = new Color(140, 184, 198)
+			TextColor = SwUI.Warn
 		};
-		panel.Append(_detail);
+		container.Append(_status);
 
-		float buttonTop = panelHeight - 68;
-		_primary = SharedWorldsUIState.MakeButton("Rehost now", 24, buttonTop, 166, PrimaryClicked);
-		_decline = SharedWorldsUIState.MakeButton("Not now", 202, buttonTop, 124, DeclineClicked);
-		_back = SharedWorldsUIState.MakeButton("Back", panelWidth - 164, buttonTop, 140, BackClicked);
-		panel.Append(_primary);
-		panel.Append(_decline);
-		panel.Append(_back);
+		_detail = new UIText("", 0.75f) {
+			Left = StyleDimension.FromPixels(10f),
+			Top = StyleDimension.FromPixels(140f),
+			Width = StyleDimension.FromPixelsAndPercent(-20f, 1f),
+			Height = StyleDimension.FromPixelsAndPercent(-192f, 1f),
+			IsWrapped = true,
+			TextOriginX = 0f,
+			TextColor = SwUI.Muted
+		};
+		container.Append(_detail);
+
+		_decline = SwUI.Button("Not now", 120, DeclineClicked);
+		_decline.VAlign = 1f;
+		_decline.Left = StyleDimension.FromPixels(4f);
+		container.Append(_decline);
+
+		root.Append(SwUI.FatButton("Back to menu", BackClicked, 0f));
+
+		_primary = SwUI.FatButton("Waiting...", PrimaryClicked, 1f);
+		_primary.SetText("Waiting...");
+		root.Append(_primary);
 
 		Refresh();
 	}
@@ -124,38 +119,31 @@ public sealed class SharedWorldsMigrationUIState : UIState
 			return;
 		}
 
-		if (string.IsNullOrEmpty(_handoffBy) && !_preparing && !_declined && context.IsSelfTurn) {
-			_primary.SetText("Rehost now");
-			_primary.IgnoresMouseInteraction = false;
-			_primary.BackgroundColor = new Color(28, 108, 86, 245);
-			_primary.BorderColor = new Color(96, 220, 170, 240);
-
-			_decline.SetText("Not now");
-			_decline.IgnoresMouseInteraction = false;
-			_decline.BackgroundColor = new Color(30, 48, 62, 240);
-			_decline.BorderColor = new Color(92, 132, 150, 220);
-		}
-		else if (_rejoinHost != null) {
-			_primary.SetText("Rejoin now");
-			_primary.IgnoresMouseInteraction = false;
-			_primary.BackgroundColor = new Color(30, 78, 94, 245);
-			_primary.BorderColor = new Color(82, 174, 192, 235);
-
+		// The big corner button is always visible; it lights up when it can be used.
+		if (_rejoinHost != null) {
+			SetPrimary("Rejoin now", enabled: true);
 			_decline.SetText("Wait");
 			_decline.IgnoresMouseInteraction = true;
-			_decline.BackgroundColor = new Color(24, 36, 48, 235);
-			_decline.BorderColor = new Color(62, 88, 102, 220);
 		}
-		else {
-			_primary.SetText(_preparing ? "Preparing..." : _handoffBy.Length > 0 ? "Handoff..." : "Waiting...");
-			_primary.IgnoresMouseInteraction = true;
-			_primary.BackgroundColor = new Color(24, 38, 50, 235);
-			_primary.BorderColor = new Color(62, 88, 102, 220);
-
+		else if (!string.IsNullOrEmpty(_handoffBy)) {
+			SetPrimary("Handoff in progress...", enabled: false);
 			_decline.SetText("Not now");
 			_decline.IgnoresMouseInteraction = true;
-			_decline.BackgroundColor = new Color(24, 36, 48, 235);
-			_decline.BorderColor = new Color(62, 88, 102, 220);
+		}
+		else if (_preparing) {
+			SetPrimary("Preparing...", enabled: false);
+			_decline.SetText("Not now");
+			_decline.IgnoresMouseInteraction = true;
+		}
+		else if (context.IsSelfTurn && !_declined) {
+			SetPrimary("Rehost now", enabled: true);
+			_decline.SetText("Not now");
+			_decline.IgnoresMouseInteraction = false;
+		}
+		else {
+			SetPrimary(_declined ? "Waiting for others..." : "Waiting...", enabled: false);
+			_decline.SetText("Not now");
+			_decline.IgnoresMouseInteraction = true;
 		}
 
 		if (context.IsExhausted && string.IsNullOrEmpty(_handoffBy) && _newHost == null && _rejoinHost == null && !_preparing) {
@@ -164,6 +152,22 @@ public sealed class SharedWorldsMigrationUIState : UIState
 		}
 
 		RefreshText(context);
+	}
+
+	private void SetPrimary(string text, bool enabled)
+	{
+		if (_primary.Text != text)
+			_primary.SetText(text);
+
+		_primary.IgnoresMouseInteraction = !enabled;
+		if (enabled) {
+			_primary.BackgroundColor = SwUI.ButtonBg;
+			_primary.BorderColor = SwUI.ButtonBorder;
+		}
+		else {
+			_primary.BackgroundColor = SwUI.ItemBg;
+			_primary.BorderColor = SwUI.ItemBorder;
+		}
 	}
 
 	private void Refresh()
@@ -217,58 +221,55 @@ public sealed class SharedWorldsMigrationUIState : UIState
 
 	private void RefreshText(SharedWorldsMigrationContext context)
 	{
-		_title.SetText("Shared world session ended");
-		_body.SetText($"The original host left '{context.Record.WorldName}'. The world is closed for a moment while a new host is chosen.");
+		_body.SetText($"The host of '{context.Record.WorldName}' left the game. The group is choosing a new host — you will rejoin automatically once one is running.");
+
+		Color statusColor = SwUI.Warn;
+		string statusText;
 
 		if (_message.Length > 0) {
-			_detail.SetText(_message + "\n\n" + CandidateText(context));
-			return;
+			statusText = _message;
+			if (_message.StartsWith("New host found", StringComparison.Ordinal) || _message.StartsWith("The original host is still online", StringComparison.Ordinal))
+				statusColor = SwUI.Live;
 		}
-
-		if (_rejoinHost != null) {
-			_detail.SetText(_message + "\n\n" + CandidateText(context));
-			return;
+		else if (_preparing) {
+			statusText = "Preparing the latest snapshot and starting Host & Play...";
+			statusColor = SwUI.Bright;
 		}
-
-		if (_preparing) {
-			_detail.SetText("Preparing the latest snapshot and starting Host & Play...");
-			return;
+		else if (_rejoinHost != null) {
+			statusText = "The original host is still online. Rejoin the existing session?";
+			statusColor = SwUI.Live;
 		}
-
-		if (_declined) {
+		else if (_declined) {
 			ulong? next = context.CurrentCandidate;
-			_detail.SetText(next == null || next == WorkshopService.CurrentSteamId
+			statusText = next == null || next == WorkshopService.CurrentSteamId
 				? "Not this time. Waiting for another player..."
-				: $"Not this time. Waiting for {WorkshopService.PersonaName(next.Value)}...");
-			return;
+				: $"Not this time. Waiting for {WorkshopService.PersonaName(next.Value)}...";
+		}
+		else if (context.IsSelfTurn) {
+			statusText = $"It is your turn — rehost '{context.Record.WorldName}' now?";
+			statusColor = SwUI.Live;
+		}
+		else {
+			ulong? candidate = context.CurrentCandidate;
+			if (candidate == null) {
+				statusText = "Waiting for a new host...";
+			}
+			else {
+				double until = SharedWorldsMigrationContext.StartDelaySeconds + (context.CurrentSlot + 1) * SharedWorldsMigrationContext.SlotSeconds - context.ElapsedSeconds;
+				statusText = $"Waiting for {WorkshopService.PersonaName(candidate.Value)} to rehost... next offer in {Math.Max(0, (int)Math.Ceiling(until))}s.";
+			}
 		}
 
-		if (context.IsSelfTurn) {
-			_detail.SetText(
-				"You are the next host in the recovery order.\n\n" +
-				$"Rehost '{context.Record.WorldName}' now?\n\n" +
-				CandidateText(context));
-			return;
-		}
-
-		ulong? candidate = context.CurrentCandidate;
-		if (candidate == null) {
-			_detail.SetText(CandidateText(context));
-			return;
-		}
-
-		double until = SharedWorldsMigrationContext.StartDelaySeconds + (context.CurrentSlot + 1) * SharedWorldsMigrationContext.SlotSeconds - context.ElapsedSeconds;
-		_detail.SetText(
-			$"Waiting for {WorkshopService.PersonaName(candidate.Value)} to rehost...\n" +
-			$"Next offer in {Math.Max(0, (int)Math.Ceiling(until))}s.\n\n" +
-			CandidateText(context));
+		_status.SetText(statusText);
+		_status.TextColor = statusColor;
+		_detail.SetText(CandidateText(context));
 	}
 
 	private static string CandidateText(SharedWorldsMigrationContext context)
 	{
 		string own = WorkshopService.PersonaName(WorkshopService.CurrentSteamId);
 		var names = context.Candidates.Select((id, index) => {
-			string marker = id == WorkshopService.CurrentSteamId ? " (you)" : "";
+			string marker = id == WorkshopService.CurrentSteamId ? "  (you)" : "";
 			return $"  {index + 1}. {WorkshopService.PersonaName(id)}{marker}";
 		});
 		return "Recovery order:\n" + string.Join("\n", names.Take(8)) + (context.Candidates.Count > 8 ? "\n  ..." : "") +
@@ -292,7 +293,6 @@ public sealed class SharedWorldsMigrationUIState : UIState
 		_preparing = true;
 		_message = "Preparing the latest snapshot...";
 		SharedWorldsPresence.SetHandoff(context.Record.WorldId);
-		SoundEngine.PlaySound(SoundID.MenuTick);
 		RefreshText(context);
 
 		_ = Task.Run(async () => {
@@ -337,7 +337,6 @@ public sealed class SharedWorldsMigrationUIState : UIState
 
 		_declined = true;
 		_message = "";
-		SoundEngine.PlaySound(SoundID.MenuTick);
 		RefreshText(context);
 	}
 

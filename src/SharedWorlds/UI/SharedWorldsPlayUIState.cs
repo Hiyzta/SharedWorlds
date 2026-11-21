@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Terraria;
 using Terraria.Audio;
 using Terraria.GameContent.UI.Elements;
@@ -10,23 +11,36 @@ namespace SharedWorlds.UI;
 
 /// <summary>
 /// The clean Play screen reached from the real "Play Shared Worlds" multiplayer-menu row.
-/// Worlds are grouped by what a player can do right now: join a live host, host a saved
-/// snapshot, or fix a sync problem.
+/// The frame, palette and card artwork mirror Terraria's own world select so the screen
+/// feels like part of the game: a title tab, a scrollable list of world cards and the two
+/// large corner buttons. Each card shows what can be done right now — join a live host,
+/// host the latest saved snapshot, or fix a sync problem.
 /// </summary>
 public sealed class SharedWorldsPlayUIState : UIState
 {
+	private const float ContainerBottomGap = 110f;
+	private const float ToolbarHeight = 46f;
+
 	private readonly int _returnMenuMode;
 	private readonly string? _initialStatus;
 	private readonly string? _focusWorldId;
 	private readonly string? _autoSyncWorldId;
 	private readonly List<PlayWorldCard> _cards = new();
 
+	private UIPanel _container = null!;
 	private UIList _list = null!;
+	private UIScrollbar _scrollbar = null!;
+	private bool _scrollbarAttached;
+	private UIText _summary = null!;
 	private UIText _status = null!;
+	private Color _statusColor = SwUI.Muted;
 	private bool _busy;
 	private string _statusText = "";
 	private Task? _refreshTask;
 	private DateTime _lastLivePollUtc = DateTime.MinValue;
+	private DateTime _lastRefreshUtc;
+
+	private static readonly string IdleHint = "Join a live world, or host the latest saved snapshot.";
 
 	public SharedWorldsPlayUIState(int returnMenuMode = 12, string? status = null, string? focusWorldId = null, string? autoSyncWorldId = null)
 	{
@@ -38,93 +52,78 @@ public sealed class SharedWorldsPlayUIState : UIState
 
 	public override void OnInitialize()
 	{
-		float panelWidth = Math.Clamp(Main.screenWidth - 80, 760, 1040);
-		float panelHeight = Math.Clamp(Main.screenHeight - 56, 540, 760);
+		UIElement root = SwUI.MakeRoot();
+		Append(root);
+		root.Append(SwUI.TabTitle("Play Shared Worlds"));
 
-		var panel = new UIPanel {
-			Width = StyleDimension.FromPixels(panelWidth),
-			Height = StyleDimension.FromPixels(panelHeight),
-			HAlign = 0.5f,
-			VAlign = 0.5f,
-			BackgroundColor = new Color(11, 21, 33, 248),
-			BorderColor = new Color(48, 88, 108, 255)
-		};
-		Append(panel);
+		_container = SwUI.MakeContainer(ContainerBottomGap);
+		root.Append(_container);
 
-		var header = new UIPanel {
-			Width = StyleDimension.FromPixelsAndPercent(0, 1f),
-			Height = StyleDimension.FromPixels(100),
-			BackgroundColor = new Color(19, 42, 59, 255),
-			BorderColor = new Color(48, 88, 108, 255)
-		};
-		panel.Append(header);
-
-		panel.Append(new UIText("Play Shared Worlds", 1.16f, large: true) {
-			Left = StyleDimension.FromPixels(24),
-			Top = StyleDimension.FromPixels(2),
-			TextOriginX = 0f
-		});
-
-		panel.Append(new UIText("Join a live world, or take over the latest saved snapshot.", 0.68f) {
-			Left = StyleDimension.FromPixels(24),
-			Top = StyleDimension.FromPixels(56),
+		// Toolbar: a live summary on the left, refresh on the right.
+		_summary = new UIText("", 0.75f) {
+			Left = StyleDimension.FromPixels(6f),
+			VAlign = 0f,
+			Top = StyleDimension.FromPixels(10f),
+			Width = StyleDimension.FromPixelsAndPercent(-140f, 1f),
+			Height = StyleDimension.FromPixels(24f),
 			TextOriginX = 0f,
-			TextColor = new Color(126, 196, 210)
-		});
-
-		panel.Append(SharedWorldsUIState.MakeButton("Refresh", panelWidth - 376, 22, 94, RefreshAll));
-		panel.Append(SharedWorldsUIState.MakeButton("Manage", panelWidth - 270, 22, 112, OpenManage));
-		panel.Append(SharedWorldsUIState.MakeButton("Back", panelWidth - 146, 22, 96, GoBack));
-
-		var listPanel = new UIPanel {
-			Left = StyleDimension.FromPixels(20),
-			Top = StyleDimension.FromPixels(112),
-			Width = StyleDimension.FromPixels(panelWidth - 40),
-			Height = StyleDimension.FromPixels(panelHeight - 206),
-			BackgroundColor = new Color(7, 14, 23, 232),
-			BorderColor = new Color(34, 63, 78, 255)
+			TextColor = SwUI.Muted
 		};
-		panel.Append(listPanel);
+		_container.Append(_summary);
+
+		var refresh = SwUI.Button("Refresh", 124, RefreshAll);
+		refresh.HAlign = 1f;
+		refresh.Top = StyleDimension.FromPixels(5f);
+		refresh.Left = StyleDimension.FromPixels(-6f);
+		_container.Append(refresh);
 
 		_list = new UIList {
-			Left = StyleDimension.FromPixels(8),
-			Top = StyleDimension.FromPixels(8),
-			Width = StyleDimension.FromPixelsAndPercent(-34, 1f),
-			Height = StyleDimension.FromPixelsAndPercent(-16, 1f),
-			ListPadding = 7f
+			Top = StyleDimension.FromPixels(ToolbarHeight),
+			Width = StyleDimension.FromPercent(1f),
+			Height = StyleDimension.FromPixelsAndPercent(-ToolbarHeight, 1f),
+			ListPadding = 5f
 		};
-		listPanel.Append(_list);
+		_container.Append(_list);
 
-		var scrollbar = new UIScrollbar {
-			HAlign = 1f,
-			Width = StyleDimension.FromPixels(20),
-			Height = StyleDimension.FromPixelsAndPercent(-16, 1f),
-			Top = StyleDimension.FromPixels(8)
-		};
-		scrollbar.SetView(100f, 1000f);
-		listPanel.Append(scrollbar);
-		_list.SetScrollbar(scrollbar);
+		_scrollbar = new UIScrollbar();
+		_scrollbar.SetView(100f, 1000f);
+		_scrollbar.HAlign = 1f;
+		_scrollbar.Top = StyleDimension.FromPixels(ToolbarHeight);
+		_scrollbar.Height = StyleDimension.FromPixelsAndPercent(-ToolbarHeight, 1f);
+		_list.SetScrollbar(_scrollbar);
 
-		var statusPanel = new UIPanel {
-			Left = StyleDimension.FromPixels(20),
-			Top = StyleDimension.FromPixels(panelHeight - 86),
-			Width = StyleDimension.FromPixels(panelWidth - 40),
-			Height = StyleDimension.FromPixels(48),
-			BackgroundColor = new Color(8, 17, 27, 214),
-			BorderColor = new Color(34, 63, 78, 255)
-		};
-		panel.Append(statusPanel);
-
-		_status = new UIText("", 0.66f) {
-			Left = StyleDimension.FromPixels(10),
-			Top = StyleDimension.FromPixels(6),
-			Width = StyleDimension.FromPixels(panelWidth - 64),
-			Height = StyleDimension.FromPixels(36),
+		// Status strip in the footer zone vanilla leaves empty below the corner buttons.
+		_status = new UIText("", 0.75f) {
+			Width = StyleDimension.FromPercent(1f),
+			VAlign = 1f,
+			Height = StyleDimension.FromPixels(40f),
 			IsWrapped = true,
 			TextOriginX = 0f,
-			TextColor = new Color(190, 224, 234)
+			TextColor = _statusColor
 		};
-		statusPanel.Append(_status);
+		root.Append(_status);
+
+		root.Append(SwUI.FatButton("Back", GoBack, 0f));
+		root.Append(SwUI.FatButton("Manage", OpenManage, 1f));
+	}
+
+	public override void Recalculate()
+	{
+		// Vanilla behavior: the scrollbar only exists when the list can actually scroll.
+		if (_scrollbar != null) {
+			if (_scrollbarAttached && !_scrollbar.CanScroll) {
+				_container.RemoveChild(_scrollbar);
+				_scrollbarAttached = false;
+				_list.Width = StyleDimension.FromPercent(1f);
+			}
+			else if (!_scrollbarAttached && _scrollbar.CanScroll) {
+				_container.Append(_scrollbar);
+				_scrollbarAttached = true;
+				_list.Width = StyleDimension.FromPixelsAndPercent(-25f, 1f);
+			}
+		}
+
+		base.Recalculate();
 	}
 
 	public override void OnActivate()
@@ -132,13 +131,16 @@ public sealed class SharedWorldsPlayUIState : UIState
 		SharedWorldsService.Instance.Changed -= OnServiceChanged;
 		SharedWorldsService.Instance.Changed += OnServiceChanged;
 		SharedWorldsPresence.Invalidate();
-		_statusText = _initialStatus ?? "";
+		SetStatus(_initialStatus ?? "");
+		if (string.IsNullOrWhiteSpace(_statusText))
+			SetStatus(IdleHint, SwUI.Bright);
+
 		RefreshList();
 
 		if (!string.IsNullOrWhiteSpace(_autoSyncWorldId)) {
 			SharedWorldRecord? record = SharedWorldsService.Instance.Registry.FindByWorldId(_autoSyncWorldId);
 			if (record != null) {
-				SetStatus("Original host left — the server closed. Fetching the latest snapshot...");
+				SetStatus("The original host left. Fetching the latest snapshot...", SwUI.Bright);
 				BeginSync(record);
 				return;
 			}
@@ -168,20 +170,48 @@ public sealed class SharedWorldsPlayUIState : UIState
 		}
 
 		if (_refreshTask != null && _refreshTask.IsCompleted) {
+			bool wasBusyMessage = _statusText.StartsWith("Checking", StringComparison.Ordinal);
 			_refreshTask = null;
 			_busy = false;
-			if (string.IsNullOrWhiteSpace(_statusText))
-				_statusText = "Ready. Live worlds update automatically.";
+			_lastRefreshUtc = DateTime.UtcNow;
+			if (wasBusyMessage)
+				SetStatus(IdleHint, SwUI.Bright);
 			RefreshList();
 		}
 
+		UpdateSummary();
 		_status.SetText(_statusText);
+		_status.TextColor = _statusColor;
+	}
+
+	private void UpdateSummary()
+	{
+		int total = _cards.Count;
+		if (total == 0) {
+			_summary?.SetText("No shared worlds yet");
+			return;
+		}
+
+		int live = _cards.Count(c => c.IsLive);
+		string worlds = total == 1 ? "1 shared world" : $"{total} shared worlds";
+		string liveText = live == 0 ? "none live" : live == 1 ? "1 live now" : $"{live} live now";
+		string checkedText = _lastRefreshUtc == default
+			? "checking…"
+			: "checked " + FormatUtil.Relative(_lastRefreshUtc);
+
+		_summary?.SetText($"{worlds} · {liveText} · {checkedText}");
 	}
 
 	public void SetStatus(string text)
+		=> SetStatus(text, SwUI.Bright);
+
+	public void SetStatus(string text, Color color)
 	{
 		_statusText = text ?? "";
+		_statusColor = color;
 		_status?.SetText(_statusText);
+		if (_status != null)
+			_status.TextColor = _statusColor;
 	}
 
 	public void Reload()
@@ -202,13 +232,10 @@ public sealed class SharedWorldsPlayUIState : UIState
 
 		_list.Clear();
 		foreach (SharedWorldRecord record in records) {
-			if (existing.TryGetValue(record.WorldId, out PlayWorldCard? card)) {
+			if (existing.TryGetValue(record.WorldId, out PlayWorldCard? card))
 				card.UpdateRecord(record);
-			}
-			else {
+			else
 				card = new PlayWorldCard(record, this);
-				card.Activate();
-			}
 
 			next.Add(card);
 			_list.Add(card);
@@ -217,34 +244,43 @@ public sealed class SharedWorldsPlayUIState : UIState
 		_cards.Clear();
 		_cards.AddRange(next);
 
-		if (_cards.Count == 0) {
-			var empty = new UIPanel {
-				Width = StyleDimension.FromPixelsAndPercent(-6, 1f),
-				Height = StyleDimension.FromPixels(170),
-				BackgroundColor = new Color(14, 29, 42, 240),
-				BorderColor = new Color(34, 63, 78, 255)
-			};
-
-			empty.Append(new UIText("Nothing shared yet", 0.94f) {
-				HAlign = 0.5f,
-				Top = StyleDimension.FromPixels(24)
-			});
-			empty.Append(new UIText("Register a local world once, or import an invite from another player.", 0.66f) {
-				HAlign = 0.5f,
-				Top = StyleDimension.FromPixels(58),
-				TextColor = new Color(150, 190, 204)
-			});
-			empty.Append(SharedWorldsUIState.MakeButton("Register world", 210, 108, 150, OpenManage));
-			empty.Append(SharedWorldsUIState.MakeButton("Import invite", 374, 108, 150, OpenManage));
-			_list.Add(empty);
-		}
+		if (_cards.Count == 0)
+			_list.Add(BuildEmptyState());
 
 		_list.Recalculate();
-		if (!string.IsNullOrEmpty(_focusWorldId)) {
-			// The list is sorted so a live focused world is already near the top; just make
-			// sure the list is scrolled to its start rather than a stale position.
+		if (!string.IsNullOrEmpty(_focusWorldId))
 			_list.ViewPosition = 0f;
-		}
+	}
+
+	private UIElement BuildEmptyState()
+	{
+		var empty = new UIPanel {
+			Height = StyleDimension.FromPixels(240f),
+			BackgroundColor = SwUI.ItemBg,
+			BorderColor = SwUI.ItemBorder
+		};
+		empty.SetPadding(12f);
+
+		empty.Append(new UIText("No shared worlds yet", 0.95f, large: true) {
+			HAlign = 0.5f,
+			Top = StyleDimension.FromPixels(30f)
+		});
+
+		empty.Append(new UIText("Register a world you own, or import an invite code from a friend.\nShared worlds appear here, ready to join or host.", 0.75f) {
+			HAlign = 0.5f,
+			Top = StyleDimension.FromPixels(74f),
+			Width = StyleDimension.FromPixelsAndPercent(-30f, 1f),
+			IsWrapped = true,
+			TextColor = SwUI.Muted
+		});
+
+		var manage = SwUI.Button("Manage shared worlds", 210, OpenManage);
+		manage.HAlign = 0.5f;
+		manage.VAlign = 1f;
+		manage.Top = StyleDimension.FromPixels(-14f);
+		empty.Append(manage);
+
+		return empty;
 	}
 
 	public void RefreshAll()
@@ -253,7 +289,7 @@ public sealed class SharedWorldsPlayUIState : UIState
 			return;
 
 		_busy = true;
-		SetStatus("Checking the latest snapshots and live Steam sessions...");
+		SetStatus("Checking the latest snapshots and live sessions...", SwUI.Bright);
 
 		_refreshTask = Task.Run(async () => {
 			foreach (SharedWorldRecord record in SharedWorldsService.Instance.Registry.Snapshot().OrderByDescending(r => r.LastUpdatedUtc)) {
@@ -274,14 +310,13 @@ public sealed class SharedWorldsPlayUIState : UIState
 
 		LiveWorldSession? live = SharedWorldsLiveService.FindLive(record);
 		if (live == null) {
-			SetStatus("That world is not online right now. Host it, or refresh in a moment.");
+			SetStatus("That world is not online right now. Host it, or refresh again in a moment.", SwUI.Warn);
 			return;
 		}
 
-		if (!SharedWorldsUI.JoinLobby(live, out string error)) {
-			SetStatus(error);
-			return;
-		}
+		SetStatus($"Joining '{live.WorldName}' through Steam...", SwUI.Bright);
+		if (!SharedWorldsUI.JoinLobby(live, out string error))
+			SetStatus(error, SwUI.Warn);
 	}
 
 	public void BeginHost(SharedWorldRecord record)
@@ -291,18 +326,18 @@ public sealed class SharedWorldsPlayUIState : UIState
 
 		LiveWorldSession? live = SharedWorldsLiveService.FindLive(record);
 		if (live != null) {
-			SetStatus($"{WorkshopService.PersonaName(live.HostSteamId)} is already hosting this world. Join instead of starting a second host.");
+			SetStatus($"{WorkshopService.PersonaName(live.HostSteamId)} is already hosting this world. Join instead of starting a second host.", SwUI.Warn);
 			return;
 		}
 
 		_busy = true;
-		SetStatus($"Checking and preparing '{record.WorldName}'...");
+		SetStatus($"Checking and preparing '{record.WorldName}'...", SwUI.Bright);
 		_ = Task.Run(async () => {
 			(bool success, string message) = await SharedWorldsLiveService.PrepareHostAsync(record).ConfigureAwait(false);
 			Main.QueueMainThreadAction(() => {
 				_busy = false;
 				if (!success) {
-					SetStatus(message);
+					SetStatus(message, SwUI.Warn);
 					RefreshList();
 					return;
 				}
@@ -313,11 +348,11 @@ public sealed class SharedWorldsPlayUIState : UIState
 					return;
 
 				if (!started) {
-					SetStatus(error);
+					SetStatus(error, SwUI.Warn);
 					return;
 				}
 
-				SetStatus("Starting Host & Play...");
+				SetStatus("Starting Host & Play...", SwUI.Good);
 			});
 		});
 	}
@@ -328,12 +363,20 @@ public sealed class SharedWorldsPlayUIState : UIState
 			return;
 
 		_busy = true;
-		SetStatus($"Downloading the newest snapshot of '{record.WorldName}'...");
+		SetStatus($"Downloading the newest snapshot of '{record.WorldName}'...", SwUI.Bright);
 		_ = Task.Run(async () => {
 			WorldLiveState state = await SharedWorldsLiveService.CheckAsync(record, downloadIfNewer: true).ConfigureAwait(false);
 			Main.QueueMainThreadAction(() => {
 				_busy = false;
-				SetStatus(state.Report == null ? (state.Error.Length > 0 ? state.Error : "Sync finished.") : FormatReport(state.Report));
+				_lastRefreshUtc = DateTime.UtcNow;
+				if (state.Report == null) {
+					SetStatus(state.Error.Length > 0 ? state.Error : "Sync finished.", state.Error.Length > 0 ? SwUI.Warn : SwUI.Good);
+				}
+				else {
+					Color color = state.Report.Status is SyncStatus.Fork or SyncStatus.Error ? SwUI.Warn : SwUI.Good;
+					SetStatus(FormatReport(state.Report), color);
+				}
+
 				RefreshList();
 			});
 		});
@@ -354,7 +397,6 @@ public sealed class SharedWorldsPlayUIState : UIState
 
 	public void OpenDetails(SharedWorldRecord record)
 	{
-		SoundEngine.PlaySound(SoundID.MenuTick);
 		Main.MenuUI.SetState(new SharedWorldPlayDetailUIState(record, this));
 		Main.menuMode = 888;
 	}
@@ -383,18 +425,22 @@ public sealed class SharedWorldsPlayUIState : UIState
 	}
 }
 
+/// <summary>
+/// One shared world on the Play screen, drawn the way vanilla draws a world row: name and
+/// divider, a row of inner-panel tags for live state / save time / sync state, and action
+/// buttons along the bottom edge.
+/// </summary>
 internal sealed class PlayWorldCard : UIPanel
 {
+	private const float CardHeight = 104f;
+
 	private readonly SharedWorldsPlayUIState _owner;
 	private SharedWorldRecord _record;
 
-	private readonly UIPanel _accent;
-	private readonly UIText _name;
-	private readonly UIText _status;
-	private readonly UIText _sync;
-	private readonly UIText _detail;
 	private readonly UITextPanel<string> _primary;
 	private readonly UITextPanel<string> _details;
+	private readonly UIText _hostInfo;
+	private bool _dimmed;
 
 	public string WorldId => _record.WorldId;
 	public bool IsLive => SharedWorldsLiveService.Get(_record.WorldId).Live != null;
@@ -404,83 +450,45 @@ internal sealed class PlayWorldCard : UIPanel
 		_record = record;
 		_owner = owner;
 
-		Width = StyleDimension.FromPixelsAndPercent(-8, 1f);
-		Height = StyleDimension.FromPixels(108);
-		BackgroundColor = new Color(15, 31, 44, 242);
-		BorderColor = new Color(40, 75, 92, 255);
+		Width = StyleDimension.FromPercent(1f);
+		Height = StyleDimension.FromPixels(CardHeight);
+		SetPadding(6f);
 
-		_accent = new UIPanel {
-			Left = StyleDimension.FromPixels(0),
-			Top = StyleDimension.FromPixels(0),
-			Width = StyleDimension.FromPixels(5),
-			Height = StyleDimension.FromPixelsAndPercent(0, 1f),
-			BackgroundColor = new Color(86, 190, 150, 255),
-			BorderColor = new Color(0, 0, 0, 0),
-			IgnoresMouseInteraction = true
-		};
-		Append(_accent);
-
-		_name = new UIText(record.WorldName, 0.94f) {
-			Left = StyleDimension.FromPixels(18),
-			Top = StyleDimension.FromPixels(8),
-			Width = StyleDimension.FromPixelsAndPercent(-270, 1f),
-			TextOriginX = 0f
-		};
-		Append(_name);
-
-		_status = new UIText("", 0.66f) {
-			Left = StyleDimension.FromPixels(18),
-			Top = StyleDimension.FromPixels(35),
-			Width = StyleDimension.FromPixelsAndPercent(-270, 1f),
-			TextOriginX = 0f,
-			TextColor = new Color(146, 204, 218)
-		};
-		Append(_status);
-
-		_sync = new UIText("", 0.62f) {
-			Left = StyleDimension.FromPixels(18),
-			Top = StyleDimension.FromPixels(58),
-			Width = StyleDimension.FromPixelsAndPercent(-270, 1f),
-			TextOriginX = 0f,
-			TextColor = new Color(126, 164, 178)
-		};
-		Append(_sync);
-
-		_detail = new UIText("", 0.58f) {
-			Left = StyleDimension.FromPixels(18),
-			Top = StyleDimension.FromPixels(80),
-			Width = StyleDimension.FromPixelsAndPercent(-270, 1f),
-			TextOriginX = 0f,
-			TextColor = new Color(106, 142, 156)
-		};
-		Append(_detail);
-
-		_primary = new UITextPanel<string>("Host", 0.68f) {
-			HAlign = 1f,
-			Left = StyleDimension.FromPixels(-18),
-			Top = StyleDimension.FromPixels(16),
-			Width = StyleDimension.FromPixels(132),
-			Height = StyleDimension.FromPixels(36),
-			BackgroundColor = new Color(30, 78, 94, 245),
-			BorderColor = new Color(82, 174, 192, 235)
-		};
-		_primary.OnLeftClick += (_, _) => PrimaryClicked();
+		_primary = SwUI.Button("Host", 124, () => PrimaryClicked());
+		_primary.VAlign = 1f;
+		_primary.Left = StyleDimension.FromPixels(4f);
 		Append(_primary);
 
-		_details = new UITextPanel<string>("Details", 0.62f) {
-			HAlign = 1f,
-			Left = StyleDimension.FromPixels(-18),
-			Top = StyleDimension.FromPixels(60),
-			Width = StyleDimension.FromPixels(86),
-			Height = StyleDimension.FromPixels(30)
-		};
-		_details.OnLeftClick += (_, _) => {
-			SoundEngine.PlaySound(SoundID.MenuTick);
+		_details = SwUI.Button("Details", 96, () => {
 			_owner.OpenDetails(_record);
-		};
+		});
+		_details.VAlign = 1f;
+		_details.Left = StyleDimension.FromPixels(134f);
 		Append(_details);
 
+		_hostInfo = new UIText("", 0.7f) {
+			HAlign = 1f,
+			VAlign = 1f,
+			Top = StyleDimension.FromPixels(-10f),
+			Width = StyleDimension.FromPixels(250f),
+			TextOriginX = 1f,
+			TextColor = SwUI.Muted
+		};
+		Append(_hostInfo);
+
 		Refresh();
+	}
+
+	public override void MouseOver(UIMouseEvent evt)
+	{
+		base.MouseOver(evt);
+		SwUI.SetItemColors(this, hovered: true);
+	}
+
+	public override void MouseOut(UIMouseEvent evt)
+	{
+		base.MouseOut(evt);
+		SwUI.SetItemColors(this, hovered: false, dimmed: _dimmed);
 	}
 
 	public void UpdateRecord(SharedWorldRecord record)
@@ -502,82 +510,128 @@ internal sealed class PlayWorldCard : UIPanel
 		if (fresh != null)
 			_record = fresh;
 
-		_name.SetText(_record.WorldName);
-		_status.SetText(SharedWorldsLiveService.StatusLine(_record, state));
-		_sync.SetText(SharedWorldsLiveService.SyncLine(_record, state));
-
-		string detail;
-		if (state.Report != null) {
-			detail = state.Report.Status switch {
-				SyncStatus.UpToDate => "Up to date with the newest snapshot",
-				SyncStatus.RemoteNewer => "A newer snapshot is available",
-				SyncStatus.LocalNewer => "This account has the newest snapshot",
-				SyncStatus.LocalOnly => "Local snapshot only; no Workshop item yet",
-				SyncStatus.Fork => "Two branches exist — choose one in Manage",
-				SyncStatus.WorkshopUnavailable => "Workshop unavailable",
-				SyncStatus.Error => "Sync error — open Details",
-				_ => state.Report.Message
-			};
-		}
-		else if (_record.PendingNeedsEula) {
-			detail = "Upload waiting for the Steam Workshop Legal Agreement";
-		}
-		else if (_record.PendingUpload) {
-			detail = "Newer local snapshot waiting to upload";
-		}
-		else if (_record.WorkshopItemId == 0) {
-			detail = "No Workshop item yet";
-		}
-		else {
-			detail = "Workshop item ready";
-		}
-
-		_detail.SetText(detail);
-
 		LiveWorldSession? live = state.Live;
 		bool isSelf = live != null && live.HostSteamId == WorkshopService.CurrentSteamId;
 		bool hasForkOrError = state.Report?.Status is SyncStatus.Fork or SyncStatus.Error;
 		bool noLocal = _record.LocalVersion == 0 && string.IsNullOrEmpty(_record.LocalHash) &&
 			!File.Exists(SharedWorldPaths.WorldPath(_record));
 
+		_dimmed = hasForkOrError;
+
 		if (live != null) {
 			_primary.SetText(isSelf ? "Hosting" : "Join");
-			_primary.BackgroundColor = isSelf ? new Color(28, 56, 52, 240) : new Color(28, 96, 78, 245);
-			_primary.BorderColor = new Color(96, 210, 164, 235);
 			_primary.IgnoresMouseInteraction = isSelf;
-			_accent.BackgroundColor = new Color(92, 216, 158, 255);
-			_status.TextColor = new Color(130, 230, 188);
+			SwUI.SetItemColors(_primary, hovered: false, dimmed: isSelf);
+			_details.SetText("Details");
 		}
 		else if (hasForkOrError) {
 			_primary.SetText("Resolve");
-			_primary.BackgroundColor = new Color(86, 56, 40, 245);
-			_primary.BorderColor = new Color(224, 148, 100, 235);
 			_primary.IgnoresMouseInteraction = false;
-			_accent.BackgroundColor = new Color(236, 158, 96, 255);
-			_status.TextColor = new Color(240, 188, 140);
+			SwUI.SetItemColors(_primary, hovered: false);
 		}
 		else if (noLocal) {
 			_primary.SetText("Sync");
-			_primary.BackgroundColor = new Color(46, 68, 92, 245);
-			_primary.BorderColor = new Color(116, 164, 196, 235);
 			_primary.IgnoresMouseInteraction = false;
-			_accent.BackgroundColor = new Color(116, 164, 196, 255);
-			_status.TextColor = new Color(150, 190, 206);
+			SwUI.SetItemColors(_primary, hovered: false);
 		}
 		else {
 			_primary.SetText("Host");
-			_primary.BackgroundColor = new Color(30, 78, 94, 245);
-			_primary.BorderColor = new Color(82, 174, 192, 235);
 			_primary.IgnoresMouseInteraction = false;
-			_accent.BackgroundColor = new Color(86, 174, 200, 255);
-			_status.TextColor = new Color(146, 204, 218);
+			SwUI.SetItemColors(_primary, hovered: false);
 		}
 
+		string host = WorkshopService.PersonaName(_record.LastHostSteamId);
+		string accounts = _record.Participants.Count == 0 ? "no other accounts" : $"{_record.Participants.Count} participant account(s)";
+		_hostInfo.SetText($"Last host: {host} · {accounts}");
+	}
+
+	protected override void DrawSelf(SpriteBatch sb)
+	{
+		base.DrawSelf(sb);
+
+		WorldLiveState state = SharedWorldsLiveService.Get(_record.WorldId);
+		SharedWorldRecord? fresh = SharedWorldsService.Instance.Registry.FindByWorldId(_record.WorldId);
+		if (fresh != null)
+			_record = fresh;
+
+		CalculatedStyle inner = GetInnerDimensions();
+
+		// Name row.
+		bool liveOnline = state.Live != null;
+		Color nameColor = liveOnline ? Color.White : (Color.Lerp(Color.White, Color.Gray, _dimmed ? 0.45f : 0f));
+		string name = SwUI.CropToFit(_record.WorldName, inner.Width - 20f);
+		Utils.DrawBorderString(sb, name, new Vector2(inner.X, inner.Y - 2f), nameColor);
+
+		SwUI.DrawDivider(sb, new Vector2(inner.X, inner.Y + 24f), inner.Width);
+
+		// Tag row: live state, save time, sync state.
+		Vector2 tagPos = new(inner.X, inner.Y + 32f);
+		float stateWidth = 200f;
+		float savedWidth = 150f;
+		float syncWidth = Math.Max(180f, inner.Width - stateWidth - savedWidth - 10f);
+
+		string stateText;
+		Color stateColor;
+		if (liveOnline) {
+			LiveWorldSession live = state.Live!;
+			bool isSelf = live.HostSteamId == WorkshopService.CurrentSteamId;
+			string players = live.Players == 1 ? "1 player" : $"{live.Players} players";
+			stateText = isSelf
+				? $"LIVE · you are hosting · {players}"
+				: $"LIVE · {SwUI.CropToFit(WorkshopService.PersonaName(live.HostSteamId), 84f)} · {players}";
+			stateColor = SwUI.Live;
+		}
+		else {
+			stateText = "OFFLINE";
+			stateColor = SwUI.Muted;
+		}
+
+		string savedText = _record.LastUpdatedUtc == default
+			? "Never saved"
+			: "Saved " + FormatUtil.Relative(_record.LastUpdatedUtc);
+		Color savedColor = _record.LastUpdatedUtc == default ? SwUI.Muted : Color.White;
+
+		(string text, Color color) sync = GetSyncTag(state);
+		SwUI.DrawTag(sb, tagPos, stateWidth, stateText, stateColor);
+		SwUI.DrawTag(sb, new Vector2(tagPos.X + stateWidth + 5f, tagPos.Y), savedWidth, savedText, savedColor);
+		SwUI.DrawTag(sb, new Vector2(tagPos.X + stateWidth + savedWidth + 10f, tagPos.Y), syncWidth, sync.text, sync.color);
+	}
+
+	private (string text, Color color) GetSyncTag(WorldLiveState state)
+	{
+		if (state.Report != null) {
+			switch (state.Report.Status) {
+				case SyncStatus.UpToDate:
+					return ("Up to date", SwUI.Good);
+				case SyncStatus.RemoteNewer:
+					return ("A newer snapshot is available", SwUI.Warn);
+				case SyncStatus.LocalNewer:
+					return ("This account has the newest snapshot", Color.White);
+				case SyncStatus.LocalOnly:
+					return ("Local snapshot only; no Workshop item yet", SwUI.Muted);
+				case SyncStatus.Fork:
+					return ("Fork — two branches exist, resolve in Manage", SwUI.Warn);
+				case SyncStatus.WorkshopUnavailable:
+					return ("Workshop unavailable", SwUI.Warn);
+				case SyncStatus.Error:
+					return ("Sync error — open Details", SwUI.Warn);
+			}
+		}
+
+		if (_record.PendingNeedsEula)
+			return ("Upload waiting for the Workshop Legal Agreement", SwUI.Warn);
+		if (_record.PendingUpload)
+			return ("A newer local snapshot is waiting to upload", SwUI.Warn);
+		if (_record.WorkshopItemId == 0)
+			return ("No Workshop item yet", SwUI.Muted);
+		if (_record.LocalVersion == 0 && string.IsNullOrEmpty(_record.LocalHash))
+			return ("No local snapshot yet — sync first", SwUI.Muted);
+
+		return ("Workshop item ready", SwUI.Good);
 	}
 
 	private void PrimaryClicked()
 	{
-		SoundEngine.PlaySound(SoundID.MenuTick);
 		WorldLiveState state = SharedWorldsLiveService.Get(_record.WorldId);
 		LiveWorldSession? live = state.Live;
 		if (live != null) {
@@ -602,6 +656,7 @@ internal sealed class PlayWorldCard : UIPanel
 	}
 }
 
+/// <summary>The per-world details view from the Play screen.</summary>
 public sealed class SharedWorldPlayDetailUIState : UIState
 {
 	private readonly SharedWorldRecord _record;
@@ -615,59 +670,36 @@ public sealed class SharedWorldPlayDetailUIState : UIState
 
 	public override void OnInitialize()
 	{
-		float panelWidth = Math.Clamp(Main.screenWidth - 100, 700, 920);
-		float panelHeight = Math.Clamp(Main.screenHeight - 80, 500, 680);
+		UIElement root = SwUI.MakeRoot(670f);
+		Append(root);
+		root.Append(SwUI.TabTitle(SwUI.CropToFit(_record.WorldName, 260f)));
 
-		var panel = new UIPanel {
-			Width = StyleDimension.FromPixels(panelWidth),
-			Height = StyleDimension.FromPixels(panelHeight),
-			HAlign = 0.5f,
-			VAlign = 0.5f,
-			BackgroundColor = new Color(11, 21, 33, 248),
-			BorderColor = new Color(48, 88, 108, 255)
-		};
-		Append(panel);
-
-		panel.Append(new UIPanel {
-			Width = StyleDimension.FromPixelsAndPercent(0, 1f),
-			Height = StyleDimension.FromPixels(82),
-			BackgroundColor = new Color(19, 42, 59, 255),
-			BorderColor = new Color(48, 88, 108, 255)
-		});
-
-		panel.Append(new UIText(_record.WorldName, 1.05f, large: true) {
-			Left = StyleDimension.FromPixels(24),
-			Top = StyleDimension.FromPixels(9),
-			TextOriginX = 0f
-		});
+		var container = SwUI.MakeContainer(110f);
+		root.Append(container);
 
 		WorldLiveState state = SharedWorldsLiveService.Get(_record.WorldId);
-		panel.Append(new UIText(SharedWorldsLiveService.StatusLine(_record, state), 0.66f) {
-			Left = StyleDimension.FromPixels(24),
-			Top = StyleDimension.FromPixels(48),
-			TextOriginX = 0f,
-			TextColor = new Color(140, 196, 210)
-		});
 
-		var body = new UIText("", 0.68f) {
-			Left = StyleDimension.FromPixels(24),
-			Top = StyleDimension.FromPixels(96),
-			Width = StyleDimension.FromPixels(panelWidth - 48),
-			Height = StyleDimension.FromPixels(panelHeight - 226),
+		var statusLine = new UIText(SharedWorldsLiveService.StatusLine(_record, state), 0.85f) {
+			Left = StyleDimension.FromPixels(10f),
+			Top = StyleDimension.FromPixels(10f),
+			Width = StyleDimension.FromPixelsAndPercent(-20f, 1f),
+			TextOriginX = 0f,
+			TextColor = state.Live != null ? SwUI.Live : SwUI.Bright
+		};
+		container.Append(statusLine);
+
+		var body = new UIText(Describe(state), 0.8f) {
+			Left = StyleDimension.FromPixels(10f),
+			Top = StyleDimension.FromPixels(46f),
+			Width = StyleDimension.FromPixelsAndPercent(-20f, 1f),
+			Height = StyleDimension.FromPixelsAndPercent(-96f, 1f),
 			IsWrapped = true,
 			TextOriginX = 0f,
-			TextColor = new Color(188, 218, 230)
+			TextColor = Color.White
 		};
-		body.SetText(Describe(state));
-		panel.Append(body);
+		container.Append(body);
 
-		float firstRow = panelHeight - 112;
-		panel.Append(SharedWorldsUIState.MakeButton("Sync now", 24, firstRow, 120, () => {
-			_parent.BeginSync(_record);
-			Main.MenuUI.SetState(_parent);
-			Main.menuMode = 888;
-		}));
-		panel.Append(SharedWorldsUIState.MakeButton("Manage", 156, firstRow, 120, () => {
+		var manage = SwUI.Button("Manage", 120, () => {
 			Main.MenuUI.SetState(new SharedWorldsUIState(
 				onBack: () => {
 					Main.MenuUI.SetState(_parent);
@@ -678,26 +710,39 @@ public sealed class SharedWorldPlayDetailUIState : UIState
 					Main.menuMode = 888;
 				}));
 			Main.menuMode = 888;
-		}));
-		panel.Append(SharedWorldsUIState.MakeButton("Back", panelWidth - 112, firstRow, 88, () => {
+		});
+		manage.VAlign = 1f;
+		manage.HAlign = 1f;
+		manage.Left = StyleDimension.FromPixels(-10f);
+		container.Append(manage);
+
+		root.Append(SwUI.FatButton("Back", () => {
 			SoundEngine.PlaySound(SoundID.MenuClose);
 			Main.MenuUI.SetState(_parent);
 			Main.menuMode = 888;
-		}));
+		}, 0f));
+
+		root.Append(SwUI.FatButton("Sync now", () => {
+			_parent.BeginSync(_record);
+			Main.MenuUI.SetState(_parent);
+			Main.menuMode = 888;
+		}, 1f));
 	}
 
 	private string Describe(WorldLiveState state)
 	{
 		var sb = new System.Text.StringBuilder();
-		sb.AppendLine($"Latest saved snapshot: {FormatUtil.Timestamp(_record.LastUpdatedUtc)} ({FormatUtil.Relative(_record.LastUpdatedUtc)})");
+
+		sb.AppendLine($"Latest saved snapshot: {(_record.LastUpdatedUtc == default ? "never" : FormatUtil.Timestamp(_record.LastUpdatedUtc))}" +
+			(_record.LastUpdatedUtc == default ? "" : $" ({FormatUtil.Relative(_record.LastUpdatedUtc)})"));
 		sb.AppendLine($"Last host: {WorkshopService.PersonaName(_record.LastHostSteamId)}");
 		sb.AppendLine($"Workshop item: {(_record.WorkshopItemId == 0 ? "not created yet" : _record.WorkshopItemId.ToString())}");
-		sb.AppendLine($"Participants: {_record.Participants.Count}");
+		sb.AppendLine($"Participants: {(_record.Participants.Count == 0 ? "only this account" : _record.Participants.Count + " account(s)")}");
 		sb.AppendLine($"Upload: {(_record.PendingUpload ? (_record.PendingNeedsEula ? "waiting for the Workshop Legal Agreement" : "pending") : "up to date")}");
 
 		if (state.Live != null) {
 			sb.AppendLine();
-			sb.AppendLine($"LIVE: {WorkshopService.PersonaName(state.Live.HostSteamId)} · {FormatUtil.PlayerCount(state.Live.Players)}");
+			sb.AppendLine($"LIVE — {WorkshopService.PersonaName(state.Live.HostSteamId)} · {FormatUtil.PlayerCount(state.Live.Players)}");
 			sb.AppendLine($"Live snapshot: {FormatUtil.Timestamp(state.Live.SnapshotUtc)}");
 		}
 

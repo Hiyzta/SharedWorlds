@@ -110,16 +110,16 @@ public sealed class SharedWorldsInGamePanel : UIState
 			Height = StyleDimension.FromPixels(400),
 			HAlign = 0.5f,
 			VAlign = 0.5f,
-			BackgroundColor = new Color(13, 23, 36, 246),
-			BorderColor = new Color(52, 92, 112, 255)
+			BackgroundColor = SwUI.ContainerBg,
+			BorderColor = SwUI.ItemBorderHover
 		};
 		Append(panel);
 
 		panel.Append(new UIPanel {
 			Width = StyleDimension.FromPixelsAndPercent(0, 1f),
 			Height = StyleDimension.FromPixels(64),
-			BackgroundColor = new Color(22, 46, 64, 255),
-			BorderColor = new Color(52, 92, 112, 255)
+			BackgroundColor = SwUI.TabBg,
+			BorderColor = SwUI.ItemBorderHover
 		});
 
 		panel.Append(new UIText("Shared Worlds", 1f, large: true) {
@@ -130,39 +130,48 @@ public sealed class SharedWorldsInGamePanel : UIState
 		panel.Append(new UIText("In-game snapshot controls", 0.62f) {
 			HAlign = 0.5f,
 			Top = StyleDimension.FromPixels(38),
-			TextColor = new Color(120, 200, 214)
+			TextColor = new Color(190, 210, 255)
 		});
 
-		_body = new UIText("", 0.68f) {
+		_body = new UIText("", 0.75f) {
 			Left = StyleDimension.FromPixels(22),
-			Top = StyleDimension.FromPixels(76),
+			Top = StyleDimension.FromPixels(80),
 			Width = StyleDimension.FromPixels(556),
-			Height = StyleDimension.FromPixels(118),
+			Height = StyleDimension.FromPixels(112),
 			IsWrapped = true,
 			TextOriginX = 0f,
-			TextColor = new Color(185, 220, 232)
+			TextColor = Color.White
 		};
 		panel.Append(_body);
 
-		_openButton = SharedWorldsUIState.MakeButton("Open to friends", 22, 212, 170, OpenToFriends);
+		_openButton = SwUI.Button("Open to friends", 174, OpenToFriends);
+		_openButton.Left = StyleDimension.FromPixels(22);
+		_openButton.Top = StyleDimension.FromPixels(212);
 		panel.Append(_openButton);
 
-		_syncButton = SharedWorldsUIState.MakeButton("Sync & publish", 204, 212, 150, SyncAndPublish);
+		_syncButton = SwUI.Button("Sync & publish", 160, SyncAndPublish);
+		_syncButton.Left = StyleDimension.FromPixels(206);
+		_syncButton.Top = StyleDimension.FromPixels(212);
 		panel.Append(_syncButton);
 
-		_pendingButton = SharedWorldsUIState.MakeButton("Upload pending", 366, 212, 150, UploadPending);
+		_pendingButton = SwUI.Button("Upload pending", 160, UploadPending);
+		_pendingButton.Left = StyleDimension.FromPixels(374);
+		_pendingButton.Top = StyleDimension.FromPixels(212);
 		panel.Append(_pendingButton);
 
-		panel.Append(new UIText("F9 toggles this panel. 'Open to friends' saves, exits to the title screen and starts Host & Play.", 0.58f) {
+		panel.Append(new UIText("F9 toggles this panel. 'Open to friends' saves, exits to the title screen and starts Host & Play.", 0.65f) {
 			Left = StyleDimension.FromPixels(22),
-			Top = StyleDimension.FromPixels(262),
+			Top = StyleDimension.FromPixels(264),
 			Width = StyleDimension.FromPixels(556),
 			IsWrapped = true,
 			TextOriginX = 0f,
-			TextColor = new Color(132, 168, 182)
+			TextColor = SwUI.Muted
 		});
 
-		panel.Append(SharedWorldsUIState.MakeButton("Close", 22, 334, 100, _owner.Close));
+		var close = SwUI.Button("Close", 110, _owner.Close);
+		close.Left = StyleDimension.FromPixels(22);
+		close.Top = StyleDimension.FromPixels(338);
+		panel.Append(close);
 	}
 
 	public void Refresh()

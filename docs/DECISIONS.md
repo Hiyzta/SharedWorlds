@@ -366,3 +366,13 @@ Fallback if reflection fails: open the normal Host & Play settings screen (`Main
 **Why:** Joining a live host is faster and avoids a second server. Hosting a stale local copy is the main way to create a fork, so the offline Host path does the fast-forward check first. Showing unregistered friend worlds would imply a discovery service the mod deliberately does not have.
 
 **Consequence:** A world that is live but has a local sync error still offers Join; a world that is offline and forked refuses Host until the user resolves it. The Play screen is not a world browser.
+
+---
+
+## D-034 — All screens use Terraria's own "fancy UI" design language
+
+**Decision:** Every Shared Worlds surface — the Play screen, the Manage screen, the register-world picker, both detail views, the host-disconnected recovery screen, the in-game F9 panel and the title-screen entry — is built from one shared kit (`SwUI`) that copies vanilla's world/character select frame: the overlapping title tab, the `(33,43,79)*0.8` container, the `(63,82,151)*0.7` list items with the `(89,116,213)` hover border, `FancyUIFatButtonMouseOver` button hover with the menu-tick sound, and hand-drawn `InnerPanelBackground` tag chips and `Divider` lines for list rows. No custom color scheme is introduced anywhere.
+
+**Why:** A bespoke palette reads as "modded overlay" and erodes trust; matching the game's own high-water-mark menus (world select) makes the feature feel shipped with the game, which is the bar for sharing it with friends. Reusing vanilla's textures also keeps the mod zero-asset and immune to resolution/UI-scale changes, because the layout is percent-based exactly like `UIWorldSelect`.
+
+**Consequence:** Screens inherit vanilla's look under every menu theme and UI scale, and the scrollbars attach only when the list can actually scroll (vanilla behavior). The kit is internal to the mod: future screens get the styling for free, and a tML texture rename would surface as a load-time log line rather than a visual break.
