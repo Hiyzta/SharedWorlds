@@ -108,16 +108,17 @@ public sealed class SharedWorldsUIState : UIState
 		_container = SwUI.MakeContainer(ContainerBottomGap);
 		root.Append(_container);
 
-		// Toolbar: status text left, the two setup actions right.
-		_status = new UIText("", 0.75f) {
+		// Toolbar: a short purpose label on the left, the two setup actions on the right.
+		// Status/feedback lives in the footer (below the corner buttons), same as the Play
+		// screen, so long messages can never run into the toolbar buttons.
+		_container.Append(new UIText("Setup & maintenance", 0.75f) {
 			Left = StyleDimension.FromPixels(6f),
 			Top = StyleDimension.FromPixels(10f),
 			Width = StyleDimension.FromPixelsAndPercent(-320f, 1f),
 			Height = StyleDimension.FromPixels(26f),
 			TextOriginX = 0f,
-			TextColor = _statusColor
-		};
-		_container.Append(_status);
+			TextColor = SwUI.Muted
+		});
 
 		var register = SwUI.Button("Register world", 150, OpenPicker);
 		register.HAlign = 1f;
@@ -155,6 +156,17 @@ public sealed class SharedWorldsUIState : UIState
 		}, 0f));
 
 		root.Append(SwUI.FatButton("Sync all", SyncAll, 1f));
+
+		// Status strip in the footer zone vanilla leaves empty below the corner buttons.
+		_status = new UIText("", 0.75f) {
+			Width = StyleDimension.FromPercent(1f),
+			VAlign = 1f,
+			Height = StyleDimension.FromPixels(40f),
+			IsWrapped = true,
+			TextOriginX = 0f,
+			TextColor = _statusColor
+		};
+		root.Append(_status);
 	}
 
 	public override void Recalculate()
@@ -179,7 +191,7 @@ public sealed class SharedWorldsUIState : UIState
 	{
 		SharedWorldsService.Instance.Changed -= OnServiceChanged;
 		SharedWorldsService.Instance.Changed += OnServiceChanged;
-		ShowStatus("Register a world, import an invite, then keep each world synced from here.");
+		ShowStatus("Register a world, import an invite, then keep each world synced from here.", SwUI.Bright);
 		RefreshList();
 
 		SharedWorldRecord? pendingEula = _records.FirstOrDefault(r => r.PendingNeedsEula);
@@ -487,13 +499,14 @@ public sealed class SharedWorldsUIState : UIState
 			_status.TextColor = color;
 	}
 
-	public void ShowStatus(string text) => ShowStatus(text, SwUI.Muted);
+	public void ShowStatus(string text) => ShowStatus(text, SwUI.Bright);
 }
 
-/// <summary>One shared world on the Manage screen: snapshot info plus its maintenance actions.</summary>
+/// <summary>One shared world on the Manage screen: snapshot info plus its maintenance actions.
+/// Rows are strictly banded (name, tags, participants line, buttons) so nothing clips.</summary>
 internal sealed class ManageWorldCard : UIPanel
 {
-	private const float CardHeight = 104f;
+	private const float CardHeight = 140f;
 
 	private readonly SharedWorldRecord _record;
 	private readonly SharedWorldsUIState _owner;
@@ -529,11 +542,10 @@ internal sealed class ManageWorldCard : UIPanel
 		Append(info);
 
 		_participants = new UIText("", 0.7f) {
-			HAlign = 1f,
-			VAlign = 1f,
-			Top = StyleDimension.FromPixels(-10f),
-			Width = StyleDimension.FromPixels(210f),
-			TextOriginX = 1f,
+			Left = StyleDimension.FromPixels(18f),
+			Top = StyleDimension.FromPixels(70f),
+			Width = StyleDimension.FromPixelsAndPercent(-36f, 1f),
+			TextOriginX = 0f,
 			TextColor = SwUI.Muted
 		};
 		Append(_participants);
@@ -570,9 +582,9 @@ internal sealed class ManageWorldCard : UIPanel
 		string name = SwUI.CropToFit(_record.WorldName, inner.Width - 20f);
 		Utils.DrawBorderString(sb, name, new Vector2(inner.X, inner.Y - 2f), Color.White);
 
-		SwUI.DrawDivider(sb, new Vector2(inner.X, inner.Y + 24f), inner.Width);
+		SwUI.DrawDivider(sb, new Vector2(inner.X, inner.Y + 26f), inner.Width);
 
-		Vector2 tagPos = new(inner.X, inner.Y + 32f);
+		Vector2 tagPos = new(inner.X, inner.Y + 33f);
 		float savedWidth = 150f;
 		float itemWidth = 200f;
 		float stateWidth = Math.Max(180f, inner.Width - savedWidth - itemWidth - 10f);
@@ -588,15 +600,15 @@ internal sealed class ManageWorldCard : UIPanel
 		string stateText;
 		Color stateColor;
 		if (_record.PendingNeedsEula) {
-			stateText = "Upload waiting for the Workshop Legal Agreement";
+			stateText = "EULA needed to publish";
 			stateColor = SwUI.Warn;
 		}
 		else if (_record.PendingUpload) {
-			stateText = "A newer local snapshot is waiting to upload";
+			stateText = "Upload pending";
 			stateColor = SwUI.Warn;
 		}
 		else if (_record.WorkshopItemId == 0) {
-			stateText = "Host and save once to publish the first snapshot";
+			stateText = "Host once to publish";
 			stateColor = SwUI.Muted;
 		}
 		else {
@@ -808,6 +820,7 @@ public sealed class SharedWorldDetailUIState : UIState
 				var choice = SwUI.Button($"Use {FormatUtil.ShortTimestamp(head.TimestampUtc)}", 196, () => ResolveWithRemote(itemId));
 				choice.VAlign = 1f;
 				choice.HAlign = 1f;
+				choice.Top = StyleDimension.FromPixels(-48f);
 				choice.Left = StyleDimension.FromPixels(-10f - i * 202f);
 				container.Append(choice);
 			}

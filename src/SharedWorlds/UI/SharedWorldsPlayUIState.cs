@@ -421,12 +421,13 @@ public sealed class SharedWorldsPlayUIState : UIState
 
 /// <summary>
 /// One shared world on the Play screen, drawn the way vanilla draws a world row: name and
-/// divider, a row of inner-panel tags for live state / save time / sync state, and action
-/// buttons along the bottom edge.
+/// divider, a row of inner-panel tags for live state / save time / sync state, a muted
+/// host/participant line, and action buttons along the bottom edge. Every row has its own
+/// vertical band so nothing clips into anything.
 /// </summary>
 internal sealed class PlayWorldCard : UIPanel
 {
-	private const float CardHeight = 104f;
+	private const float CardHeight = 140f;
 
 	private readonly SharedWorldsPlayUIState _owner;
 	private SharedWorldRecord _record;
@@ -461,11 +462,10 @@ internal sealed class PlayWorldCard : UIPanel
 		Append(_details);
 
 		_hostInfo = new UIText("", 0.7f) {
-			HAlign = 1f,
-			VAlign = 1f,
-			Top = StyleDimension.FromPixels(-10f),
-			Width = StyleDimension.FromPixels(250f),
-			TextOriginX = 1f,
+			Left = StyleDimension.FromPixels(18f),
+			Top = StyleDimension.FromPixels(70f),
+			Width = StyleDimension.FromPixelsAndPercent(-36f, 1f),
+			TextOriginX = 0f,
 			TextColor = SwUI.Muted
 		};
 		Append(_hostInfo);
@@ -536,7 +536,7 @@ internal sealed class PlayWorldCard : UIPanel
 
 		string host = WorkshopService.PersonaName(_record.LastHostSteamId);
 		string accounts = _record.Participants.Count == 0 ? "no other accounts" : $"{_record.Participants.Count} participant account(s)";
-		_hostInfo.SetText($"Last host: {host} · {accounts}");
+		_hostInfo.SetText($"Last host: {host}  ·  {accounts}");
 	}
 
 	protected override void DrawSelf(SpriteBatch sb)
@@ -559,8 +559,8 @@ internal sealed class PlayWorldCard : UIPanel
 		SwUI.DrawDivider(sb, new Vector2(inner.X, inner.Y + 24f), inner.Width);
 
 		// Tag row: live state, save time, sync state.
-		Vector2 tagPos = new(inner.X, inner.Y + 32f);
-		float stateWidth = 200f;
+		Vector2 tagPos = new(inner.X, inner.Y + 33f);
+		float stateWidth = 230f;
 		float savedWidth = 150f;
 		float syncWidth = Math.Max(180f, inner.Width - stateWidth - savedWidth - 10f);
 
@@ -571,8 +571,8 @@ internal sealed class PlayWorldCard : UIPanel
 			bool isSelf = live.HostSteamId == WorkshopService.CurrentSteamId;
 			string players = live.Players == 1 ? "1 player" : $"{live.Players} players";
 			stateText = isSelf
-				? $"LIVE · you are hosting · {players}"
-				: $"LIVE · {SwUI.CropToFit(WorkshopService.PersonaName(live.HostSteamId), 84f)} · {players}";
+				? $"LIVE · you host · {players}"
+				: $"LIVE · {SwUI.CropToFit(WorkshopService.PersonaName(live.HostSteamId), 96f)} · {players}";
 			stateColor = SwUI.Live;
 		}
 		else {
@@ -600,11 +600,11 @@ internal sealed class PlayWorldCard : UIPanel
 				case SyncStatus.RemoteNewer:
 					return ("A newer snapshot is available", SwUI.Warn);
 				case SyncStatus.LocalNewer:
-					return ("This account has the newest snapshot", Color.White);
+					return ("You have the newest snapshot", Color.White);
 				case SyncStatus.LocalOnly:
-					return ("Local snapshot only; no Workshop item yet", SwUI.Muted);
+					return ("No Workshop item yet", SwUI.Muted);
 				case SyncStatus.Fork:
-					return ("Fork — two branches exist, resolve in Manage", SwUI.Warn);
+					return ("Fork — resolve in Manage", SwUI.Warn);
 				case SyncStatus.WorkshopUnavailable:
 					return ("Workshop unavailable", SwUI.Warn);
 				case SyncStatus.Error:
@@ -613,13 +613,13 @@ internal sealed class PlayWorldCard : UIPanel
 		}
 
 		if (_record.PendingNeedsEula)
-			return ("Upload waiting for the Workshop Legal Agreement", SwUI.Warn);
+			return ("EULA needed to publish", SwUI.Warn);
 		if (_record.PendingUpload)
-			return ("A newer local snapshot is waiting to upload", SwUI.Warn);
+			return ("Upload pending", SwUI.Warn);
 		if (_record.WorkshopItemId == 0)
 			return ("No Workshop item yet", SwUI.Muted);
 		if (_record.LocalVersion == 0 && string.IsNullOrEmpty(_record.LocalHash))
-			return ("No local snapshot yet — sync first", SwUI.Muted);
+			return ("No local snapshot — sync first", SwUI.Muted);
 
 		return ("Workshop item ready", SwUI.Good);
 	}

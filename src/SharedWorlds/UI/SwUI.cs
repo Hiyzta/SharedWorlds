@@ -158,7 +158,8 @@ internal static class SwUI
 		return trimmed + "…";
 	}
 
-	/// <summary>Draws one of the vanilla inner-panel tags (the world-select difficulty/size chips).</summary>
+	/// <summary>Draws one of the vanilla inner-panel tags (the world-select difficulty/size chips).
+	/// The text is cropped to the chip so a long status can never spill onto its neighbours.</summary>
 	public static void DrawTag(SpriteBatch sb, Vector2 position, float width, string text, Color color)
 	{
 		Texture2D texture = TagTexture.Value;
@@ -167,8 +168,9 @@ internal static class SwUI
 		sb.Draw(texture, new Vector2(position.X + 8f, position.Y), new Rectangle(8, 0, 8, height), Color.White, 0f, Vector2.Zero, new Vector2((width - 16f) / 8f, 1f), SpriteEffects.None, 0f);
 		sb.Draw(texture, new Vector2(position.X + width - 8f, position.Y), new Rectangle(16, 0, 8, height), Color.White);
 
-		Vector2 size = FontAssets.MouseText.Value.MeasureString(text);
-		Utils.DrawBorderString(sb, text, position + new Vector2(Math.Max(4f, width * 0.5f - size.X * 0.5f), 3f), color);
+		string fitted = CropToFit(text, Math.Max(20f, width - 16f));
+		Vector2 size = FontAssets.MouseText.Value.MeasureString(fitted);
+		Utils.DrawBorderString(sb, fitted, position + new Vector2(Math.Max(4f, width * 0.5f - size.X * 0.5f), 3f), color);
 	}
 
 	/// <summary>Draws the vanilla divider line used under each world name.</summary>
